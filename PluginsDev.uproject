@@ -1,0 +1,13 @@
+{
+	"FileVersion": 3,
+	"EngineAssociation": "{5BDE053C-4B56-2D88-3BED-5880191FF39D}",
+	"Category": "",
+	"Description": "",
+	"Modules": [
+		{
+			"Name": "PluginsDev",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		}
+	]
+}
