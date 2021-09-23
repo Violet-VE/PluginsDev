@@ -1,0 +1,23 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "FreeAndPowerfulTimeline",
+	"Description": "",
+	"Category": "Deving",
+	"CreatedBy": "Violet-VE",
+	"CreatedByURL": "Violet-VE.github.io",
+	"DocsURL": "",
+	"MarketplaceURL": "",
+	"SupportURL": "",
+	"CanContainContent": true,
+	"IsBetaVersion": false,
+	"Installed": false,
+	"Modules": [
+		{
+			"Name": "FreeAndPowerfulTimeline",
+			"Type": "Developer",
+			"LoadingPhase": "Default"
+		}
+	]
+}
