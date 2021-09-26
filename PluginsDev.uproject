@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "{8E6897D4-470A-0477-60D4-6FB91868D3F0}",
+	"EngineAssociation": "{5BDE053C-4B56-2D88-3BED-5880191FF39D}",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -12,7 +12,7 @@
 	],
 	"Plugins": [
 		{
-			"Name": "FreeAndPowerfulTimeline",
+			"Name": "AdvancedTimeline",
 			"Enabled": true
 		}
 	]
