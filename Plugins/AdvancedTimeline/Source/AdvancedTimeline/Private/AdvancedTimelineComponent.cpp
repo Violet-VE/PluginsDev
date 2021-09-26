@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+Ôªø// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "AdvancedTimelineComponent.h"
 #include "GameFramework/WorldSettings.h"
@@ -15,12 +15,19 @@ UAdvancedTimelineComponent::UAdvancedTimelineComponent(const FObjectInitializer&
 	PrimaryComponentTick.bCanEverTick = true;
 	PrimaryComponentTick.bStartWithTickEnabled = false;
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
+
+	LengthMode = TL_LastKeyFrame;
+	bLooping = false;
+	bReversePlayback=false;
+	bPlaying = false;
+	Length = 5.f;
+	PlayRate = 1.f;
+	Position = 0.0f;
 }
 
 void UAdvancedTimelineComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
 
 	if (bIgnoreTimeDilation)
 	{
@@ -31,7 +38,7 @@ void UAdvancedTimelineComponent::TickComponent(float DeltaTime, ELevelTick TickT
 		}
 		else
 		{
-			// ”…”⁄ƒ≥÷÷‘≠“Ú£¨√ª”–Actor£¨ π”√ ¿ΩÁ ±º‰≈Ú’Õ◊˜Œ™∫Û±∏ ÷∂Œ°£
+			// Áî±‰∫éÊüêÁßçÂéüÂõ†ÔºåÊ≤°ÊúâActorÔºå‰ΩøÁî®‰∏ñÁïåÊó∂Èó¥ËÜ®ËÉÄ‰Ωú‰∏∫ÂêéÂ§áÊâãÊÆµ„ÄÇ
 			UWorld* const W = GetWorld();
 			if (W)
 			{
@@ -95,48 +102,45 @@ bool UAdvancedTimelineComponent::IsReversing() const
 
 void UAdvancedTimelineComponent::SetPlaybackPosition(float NewPosition, bool bFireEvents, bool bFireUpdate,bool bIsPlay)
 {
-	const float OldPosition = GetPlaybackPosition();
+	const float OldPosition = Position;
 	Position = NewPosition;
 
 	// Iterate over each vector interpolation
-	for (int32 InterpIdx = 0; InterpIdx < AdvVectorTracks.Num(); InterpIdx++)
+	for (const FAdvVectorTrackInfo& CurrentEntry : AdvVectorTracks)
 	{
-		FAdvVectorTrackInfo& VecEntry = AdvVectorTracks.Array()[InterpIdx];
-		if (VecEntry.VectorCurve && VecEntry.OnEventFunc.IsBound())
+		if (CurrentEntry.VectorCurve && CurrentEntry.OnEventFunc.IsBound())
 		{
 			// Get vector from curve
-			FVector const Vec = VecEntry.VectorCurve->GetVectorValue(GetPlaybackPosition());
+			FVector const Vec = CurrentEntry.VectorCurve->GetVectorValue(GetPlaybackPosition());
 
 			// Pass vec to specified function
-			VecEntry.OnEventFunc.ExecuteIfBound(Vec);
+			CurrentEntry.OnEventFunc.ExecuteIfBound(Vec);
 		}
 	}
 
 	// Iterate over each float interpolation
-	for (int32 InterpIdx = 0; InterpIdx < AdvFloatTracks.Num(); InterpIdx++)
+	for (const FAdvFloatTrackInfo& CurrentEntry : AdvFloatTracks)
 	{
-		FAdvFloatTrackInfo& FloatEntry = AdvFloatTracks.Array()[InterpIdx];
-		if (FloatEntry.FloatCurve && FloatEntry.OnEventFunc.IsBound())
+		if (CurrentEntry.FloatCurve && CurrentEntry.OnEventFunc.IsBound())
 		{
 			// Get float from func
-			const float Val = FloatEntry.FloatCurve->GetFloatValue(GetPlaybackPosition());
+			const float Val = CurrentEntry.FloatCurve->GetFloatValue(GetPlaybackPosition());
 
 			// Pass float to specified function
-			FloatEntry.OnEventFunc.ExecuteIfBound(Val);
+			CurrentEntry.OnEventFunc.ExecuteIfBound(Val);
 		}
 	}
 
 	// Iterate over each color interpolation
-	for (int32 InterpIdx = 0; InterpIdx < AdvLinearColorTracks.Num(); InterpIdx++)
+	for (const FAdvLinearColorTrackInfo& CurrentEntry : AdvLinearColorTracks)
 	{
-		FAdvLinearColorTrackInfo& ColorEntry = AdvLinearColorTracks.Array()[InterpIdx];
-		if (ColorEntry.LinearColorCurve && ColorEntry.OnEventFunc.IsBound())
+		if (CurrentEntry.LinearColorCurve && CurrentEntry.OnEventFunc.IsBound())
 		{
 			// Get vector from curve
-			const FLinearColor Color = ColorEntry.LinearColorCurve->GetLinearColorValue(GetPlaybackPosition());
+			const FLinearColor Color = CurrentEntry.LinearColorCurve->GetLinearColorValue(GetPlaybackPosition());
 
 			// Pass vec to specified function
-			ColorEntry.OnEventFunc.ExecuteIfBound(Color);
+			CurrentEntry.OnEventFunc.ExecuteIfBound(Color);
 		}
 	}
 
@@ -149,24 +153,24 @@ void UAdvancedTimelineComponent::SetPlaybackPosition(float NewPosition, bool bFi
 		if (!bReversePlayback)
 		{
 			MinTime = OldPosition;
-			MaxTime = GetPlaybackPosition();
+			MaxTime = Position;
 
 			// Slight hack here.. if playing forwards and reaching the end of the sequence, force it over a little to ensure we fire events actually on the end of the sequence.
 			if (MaxTime == GetTimelineLength())
 			{
-				MaxTime += KINDA_SMALL_NUMBER;
+				MaxTime += (float)KINDA_SMALL_NUMBER;
 			}
 		}
 		// If playing sequence backwards.
 		else
 		{
-			MinTime = GetPlaybackPosition();
+			MinTime = Position;
 			MaxTime = OldPosition;
 
 			// Same small hack as above for backwards case.
 			if (MinTime == 0.f)
 			{
-				MinTime -= KINDA_SMALL_NUMBER;
+				MinTime -= (float)KINDA_SMALL_NUMBER;
 			}
 		}
 
@@ -243,7 +247,7 @@ float UAdvancedTimelineComponent::GetTimelineLength() const
 	case TL_TimelineLength:
 		return Length;
 	case TL_LastKeyFrame:
-		return GetLastKeyframeTime();
+		return GetTrackLastKeyframeTime();
 	default:
 		UE_LOG(LogAdvTimeline, Error, TEXT("Invalid timeline length mode on timeline!"));
 		return 0.f;
@@ -465,7 +469,7 @@ void UAdvancedTimelineComponent::TickAdvTimeline(float DeltaTime)
 	if (bPlaying)
 	{
 		const float TimelineLength = GetTimelineLength();
-		const float EffectiveDeltaTime = DeltaTime * (bReversePlayback ? -PlayRate : PlayRate);
+		const float EffectiveDeltaTime = DeltaTime * (bReversePlayback ? (-PlayRate) : (PlayRate));
 
 		float NewPosition = Position + EffectiveDeltaTime;
 
@@ -540,7 +544,7 @@ void UAdvancedTimelineComponent::TickAdvTimeline(float DeltaTime)
 		TimelineFinishedFunc.ExecuteIfBound();
 }
 
-void UAdvancedTimelineComponent::GetAllTrackData(TArray<UCurveBase*>& OutCurves,TSet<FName>& OutTrackName,TArray<FName>& OutFuncName) const
+void UAdvancedTimelineComponent::GetAllTrackData(TArray<UCurveBase*>& OutCurves,TArray<FName>& OutTrackName,TArray<FName>& OutFuncName) const
 {
 	for (const FAdvEventTrackInfo& ThisTrack : AdvEventTracks)
 	{
@@ -571,7 +575,7 @@ void UAdvancedTimelineComponent::GetAllTrackData(TArray<UCurveBase*>& OutCurves,
 	}
 }
 
-float UAdvancedTimelineComponent::GetLastKeyframeTime() const
+float UAdvancedTimelineComponent::GetTrackLastKeyframeTime() const
 {
 
 	float MaxTime = 0.f;
@@ -613,7 +617,7 @@ float UAdvancedTimelineComponent::GetCurveLastKeyframeTime(ETrackType InTrackTyp
 
 	float MaxTime = 0.f;
 
-	// Àº¬∑¥Ì¡À£¨µ»¥˝÷ÿ–¥
+	// ÊÄùË∑ØÈîô‰∫ÜÔºåÁ≠âÂæÖÈáçÂÜô
 	//switch (InTrackType)
 	//{
 	//	case ETrackType::EventTrack:

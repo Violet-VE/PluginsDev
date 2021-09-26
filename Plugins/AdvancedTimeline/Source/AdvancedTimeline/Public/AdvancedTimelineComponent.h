@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+ï»¿// Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
 
@@ -10,16 +10,16 @@
 #include "DeclarativeSyntaxSupport.h"
 #include "AdvancedTimelineComponent.generated.h"
 
-/** ¹ÜÀíÊÂ¼ş¹ìµÀµÄ½á¹¹Ìå¡£
- *	¹Ù·½ÊÇ°ÑËùÓĞÊÂ¼ş¹ìµÀ¶¼ÈûÔÚÁËÒ»Æğ£º
- *		²Î¼û£ºFTimeline::AddEvent(...)
- *	¹Ù·½»á°ÑËùÓĞµÄÊÂ¼şº¯ÊıºÍ¶ÔÓ¦µÄÊ±¼ä±£´æÔÚÒ»¸ö½á¹¹ÌåÖĞ£¬ÕâÑù¾ÍĞÎ³ÉÁËÍ¬ÑùµÄÊ±¼ä»áÓĞ²»Í¬µÄ¶ÔÓ¦º¯Êı(»òĞí»á¸ü·½±ãÖ´ĞĞ£¿)
- *	²»¹ıÕâÑù²»·½±ãÇø·ÖÄÄĞ©º¯ÊıÊÇÄÄ¸öÊÂ¼ş¹ìµÀµÄ¡£
- *	²»¹ıÒòÎª¹Ù·½µÄTimelineÊÇ»ùÓÚTimelineTemplateµÄ£¬ËùÒÔ¹Ù·½°ÑÊÂ¼şº¯ÊıºÍ¶ÔÓ¦µÄÇúÏßµÈĞÅÏ¢¶¼´æÔÚFTTEventTrack½á¹¹ÌåÖĞ¡£
- *	¶øFTTEventTrack½á¹¹ÌåÊÇ¼Ì³Ğ×ÔFTTTrackBaseµÄ£¬FTTTrackBase¾ßÓĞ¶ÔÓ¦µÄFName£¬¶øFTTEventTrack¶îÍâ±£´æÁËUCurveFloat*¡£
- *	ËùÒÔ¹Ù·½¿ÉÒÔ¶ÔÓ¦µ½£¬ÒòÎª´æÔÚÁËTimelineTemplateÖĞ¡£²»¹ı´Ë¾Ù½ÏÎªÈÆ£¬¹Ê±¾²å¼şÖ±½Ó½²ÇúÏßºÍ¶ÔÓ¦µÄº¯ÊıºÏ²¢ÔÚÁËÒ»Æğ£¬ÓÉ±¾²å¼ş×Ô¼º¹ÜÀíÒ»¸öÊÂ¼ş¹ìµÀ¡£
+/** ç®¡ç†äº‹ä»¶è½¨é“çš„ç»“æ„ä½“ã€‚
+ *	å®˜æ–¹æ˜¯æŠŠæ‰€æœ‰äº‹ä»¶è½¨é“éƒ½å¡åœ¨äº†ä¸€èµ·ï¼š
+ *		å‚è§ï¼šFTimeline::AddEvent(...)
+ *	å®˜æ–¹ä¼šæŠŠæ‰€æœ‰çš„äº‹ä»¶å‡½æ•°å’Œå¯¹åº”çš„æ—¶é—´ä¿å­˜åœ¨ä¸€ä¸ªç»“æ„ä½“ä¸­ï¼Œè¿™æ ·å°±å½¢æˆäº†åŒæ ·çš„æ—¶é—´ä¼šæœ‰ä¸åŒçš„å¯¹åº”å‡½æ•°(æˆ–è®¸ä¼šæ›´æ–¹ä¾¿æ‰§è¡Œï¼Ÿ)
+ *	ä¸è¿‡è¿™æ ·ä¸æ–¹ä¾¿åŒºåˆ†å“ªäº›å‡½æ•°æ˜¯å“ªä¸ªäº‹ä»¶è½¨é“çš„ã€‚
+ *	ä¸è¿‡å› ä¸ºå®˜æ–¹çš„Timelineæ˜¯åŸºäºTimelineTemplateçš„ï¼Œæ‰€ä»¥å®˜æ–¹æŠŠäº‹ä»¶å‡½æ•°å’Œå¯¹åº”çš„æ›²çº¿ç­‰ä¿¡æ¯éƒ½å­˜åœ¨FTTEventTrackç»“æ„ä½“ä¸­ã€‚
+ *	è€ŒFTTEventTrackç»“æ„ä½“æ˜¯ç»§æ‰¿è‡ªFTTTrackBaseçš„ï¼ŒFTTTrackBaseå…·æœ‰å¯¹åº”çš„FNameï¼Œè€ŒFTTEventTracké¢å¤–ä¿å­˜äº†UCurveFloat*ã€‚
+ *	æ‰€ä»¥å®˜æ–¹å¯ä»¥å¯¹åº”åˆ°ï¼Œå› ä¸ºå­˜åœ¨äº†TimelineTemplateä¸­ã€‚ä¸è¿‡æ­¤ä¸¾è¾ƒä¸ºç»•ï¼Œæ•…æœ¬æ’ä»¶ç›´æ¥è®²æ›²çº¿å’Œå¯¹åº”çš„å‡½æ•°åˆå¹¶åœ¨äº†ä¸€èµ·ï¼Œç”±æœ¬æ’ä»¶è‡ªå·±ç®¡ç†ä¸€ä¸ªäº‹ä»¶è½¨é“ã€‚
  *
- *	ÒòÎªÒıÇæ×Ô´øFTimeline¸÷ÖÖPrivateµÄÔ­Òò£¬µ¼ÖÂ±¾²å¼ş×Ô¼ºÖØĞ´ÁËÒ»±é¡£ÒòÎª²»ĞèÒªÊµÏÖTimeline½Úµã£¬ËùÒÔÕâ¸ö²å¼şÓ¦¸ÃÊÇ²»ÓÃ¼ÓÈëÀ¶Í¼/ActorµÄ³õÊ¼»¯´´½¨µÈÁ÷³ÌµÄ¡£
+ *	å› ä¸ºå¼•æ“è‡ªå¸¦FTimelineå„ç§Privateçš„åŸå› ï¼Œå¯¼è‡´æœ¬æ’ä»¶è‡ªå·±é‡å†™äº†ä¸€éã€‚å› ä¸ºä¸éœ€è¦å®ç°TimelineèŠ‚ç‚¹ï¼Œæ‰€ä»¥è¿™ä¸ªæ’ä»¶åº”è¯¥æ˜¯ä¸ç”¨åŠ å…¥è“å›¾/Actorçš„åˆå§‹åŒ–åˆ›å»ºç­‰æµç¨‹çš„ã€‚
  */
 
  /** Whether or not the timeline should be finished after the specified length, or the last keyframe in the tracks */
@@ -49,6 +49,9 @@ struct FAdvEventTrackInfo : public FAdvTrackInfoBase
 {
 	GENERATED_USTRUCT_BODY()
 public:
+	//FAdvEventTrackInfo() 
+	//	: Super::TrackType(ETrackType::EventTrack)
+	//{}
 
 	/** Curve object used to store keys */
 	UPROPERTY(EditAnywhere,BlueprintReadWrite)
@@ -97,11 +100,11 @@ public:
 };
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
-class ADVANCEDTIMELINE_API UAdvancedTimelineComponent : public UActorComponent
+class  UAdvancedTimelineComponent : public UActorComponent
 {
 	GENERATED_UCLASS_BODY()
 
-	/** Ê±¼äÏßÖĞµÄµ±Ç°Î»ÖÃ */
+	/** æ—¶é—´çº¿ä¸­çš„å½“å‰ä½ç½® */
 	UPROPERTY()
 		float Position;
 
@@ -142,21 +145,21 @@ class ADVANCEDTIMELINE_API UAdvancedTimelineComponent : public UActorComponent
 
 
 
-	/** Èç¹ûÈ«¾ÖÊ±¼äÅòÕÍÓ¦¸Ã±»ÕâÌõÊ±¼äÏßºöÂÔ£¬ÔòÎªÕæ£¬·ñÔòÎª¼Ù¡£
-	*	Ê±¼äÅòÕÍ¾ÍÊÇÄ³Ğ©ÓÎÏ·Ìá¹©µÄ¶à±¶ËÙ»òµ¯³öUIÊ±µÄÊÀ½ç»ºÊ±¡£(»òĞíÒ²ÄÜÒÔ´ËÀ´ÉèÖÃÔİÍ£ÓÎÏ·£¿)
+	/** å¦‚æœå…¨å±€æ—¶é—´è†¨èƒ€åº”è¯¥è¢«è¿™æ¡æ—¶é—´çº¿å¿½ç•¥ï¼Œåˆ™ä¸ºçœŸï¼Œå¦åˆ™ä¸ºå‡ã€‚
+	*	æ—¶é—´è†¨èƒ€å°±æ˜¯æŸäº›æ¸¸æˆæä¾›çš„å¤šå€é€Ÿæˆ–å¼¹å‡ºUIæ—¶çš„ä¸–ç•Œç¼“æ—¶ã€‚(æˆ–è®¸ä¹Ÿèƒ½ä»¥æ­¤æ¥è®¾ç½®æš‚åœæ¸¸æˆï¼Ÿ)
 	**/
 	UPROPERTY()
 		uint8 bIgnoreTimeDilation : 1;
 
-	/** ±£´æÁËËÄ¸ö²»Í¬ÀàĞÍµÄ¹ìµÀµÄÏà¹ØĞÅÏ¢¡£Ò»¸öÊ±¼äÏß¿ÉÒÔÓĞ¶à¸ö¹ìµÀ£¬ÆäÄÚÈİ³ıÁËÃû³ÆÒ²¿ÉÒÔÏàÍ¬¡£ */
+	/** ä¿å­˜äº†å››ä¸ªä¸åŒç±»å‹çš„è½¨é“çš„ç›¸å…³ä¿¡æ¯ã€‚ä¸€ä¸ªæ—¶é—´çº¿å¯ä»¥æœ‰å¤šä¸ªè½¨é“ï¼Œå…¶å†…å®¹é™¤äº†åç§°ä¹Ÿå¯ä»¥ç›¸åŒã€‚ */
 	UPROPERTY()
-		TSet<FAdvEventTrackInfo> AdvEventTracks;
+		TArray<FAdvEventTrackInfo> AdvEventTracks;
 	UPROPERTY()
-		TSet<FAdvFloatTrackInfo> AdvFloatTracks;
+		TArray<FAdvFloatTrackInfo> AdvFloatTracks;
 	UPROPERTY()
-		TSet<FAdvVectorTrackInfo> AdvVectorTracks;
+		TArray<FAdvVectorTrackInfo> AdvVectorTracks;
 	UPROPERTY()
-		TSet<FAdvLinearColorTrackInfo> AdvLinearColorTracks;
+		TArray<FAdvLinearColorTrackInfo> AdvLinearColorTracks;
 
 	/** Called whenever this timeline is playing and updates - done after all delegates are executed and variables updated  */
 	UPROPERTY()
@@ -174,160 +177,160 @@ class ADVANCEDTIMELINE_API UAdvancedTimelineComponent : public UActorComponent
 	//~ End ActorComponent Interface.
 
 
-	/** ¿ªÊ¼²¥·ÅÊ±¼äÏß */
+	/** å¼€å§‹æ’­æ”¾æ—¶é—´çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
 		void Play(bool bIsFromStart=false);
 
-	/** ¿ªÊ¼·´Ïò²¥·ÅÊ±¼äÏß */
+	/** å¼€å§‹åå‘æ’­æ”¾æ—¶é—´çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
 		void Reverse(bool bIsFromEnd=false);
 
-	/** ÔİÍ£²¥·ÅÊ±¼äÏß */
+	/** æš‚åœæ’­æ”¾æ—¶é—´çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
 		void Pause();
 
-	/** Í£Ö¹²¥·ÅÊ±¼äÏß£¬ÇÒ²¥·ÅÎ»ÖÃ¹é0 */
+	/** åœæ­¢æ’­æ”¾æ—¶é—´çº¿ï¼Œä¸”æ’­æ”¾ä½ç½®å½’0 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
 		void Reset();
 
-	/** ·µ»ØÊÇ·ñÕıÔÚ²¥·Å */
+	/** è¿”å›æ˜¯å¦æ­£åœ¨æ’­æ”¾ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Determining")
 		bool IsPlaying() const;
 
-	/** ·µ»ØÊÇ·ñÕıÔÚ·´Ïò²¥·Å */
+	/** è¿”å›æ˜¯å¦æ­£åœ¨åå‘æ’­æ”¾ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Determining")
 		bool IsReversing() const;
 
-	/** Ìø×ª²¥·ÅÎ»ÖÃ¡£ÒòÎªTickTimelineÖØĞ´µÄÔµ¹Ê£¬Ë³ÊÖÖØĞ´ÁËSetPlaybackPosition
-	  * @param Èç¹û bFireEvents ÊÇ true£¬Ìø×ªÖ®ºó´¥·¢Ò»´ÎEvent
-	  * @param Èç¹û bFireEvents ÊÇ true£¬Ìø×ªÖ®ºó´¥·¢Ò»´ÎUpdate
+	/** è·³è½¬æ’­æ”¾ä½ç½®ã€‚å› ä¸ºTickTimelineé‡å†™çš„ç¼˜æ•…ï¼Œé¡ºæ‰‹é‡å†™äº†SetPlaybackPosition
+	  * @param å¦‚æœ bFireEvents æ˜¯ trueï¼Œè·³è½¬ä¹‹åè§¦å‘ä¸€æ¬¡Event
+	  * @param å¦‚æœ bFireEvents æ˜¯ trueï¼Œè·³è½¬ä¹‹åè§¦å‘ä¸€æ¬¡Update
 	 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control", meta = (AdvancedDisplay = 1/* ³ıÁËÇ°1¸ö²ÎÊı¶¼ÊÇ¸ß¼¶²ÎÊı */))
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control", meta = (AdvancedDisplay = 1/* é™¤äº†å‰1ä¸ªå‚æ•°éƒ½æ˜¯é«˜çº§å‚æ•° */))
 		void SetPlaybackPosition(float NewPosition, bool bFireEvents = false, bool bFireUpdate = true, bool bIsPlay = false);
 
-	/** ·µ»Øµ±Ç°²¥·ÅÎ»ÖÃ(s) */
+	/** è¿”å›å½“å‰æ’­æ”¾ä½ç½®(s) */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		float GetPlaybackPosition() const;
 
-	/** ÉèÖÃÊÇ·ñÑ­»· */
+	/** è®¾ç½®æ˜¯å¦å¾ªç¯ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void SetLooping(bool bNewLooping);
 
-	/** ·µ»ØÊÇ·ñÑ­»· */
+	/** è¿”å›æ˜¯å¦å¾ªç¯ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Determining")
 		bool IsLooping() const;
 
-	/** ÉèÖÃ²¥·ÅËÙ¶È */
+	/** è®¾ç½®æ’­æ”¾é€Ÿåº¦ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void SetPlayRate(float NewRate);
 
-	/** ·µ»Øµ±Ç°²¥·ÅËÙ¶È */
+	/** è¿”å›å½“å‰æ’­æ”¾é€Ÿåº¦ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		float GetPlayRate() const;
 
-	/** ·µ»Øµ±Ç°Ê±¼äÏß³¤¶È */
+	/** è¿”å›å½“å‰æ—¶é—´çº¿é•¿åº¦ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		float GetTimelineLength() const;
 
-	/** ÉèÖÃµ±Ç°Ê±¼äÏß³¤¶È */
+	/** è®¾ç½®å½“å‰æ—¶é—´çº¿é•¿åº¦ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void SetTimelineLength(float NewLength);
 
-	/** ÉèÖÃÊÇ·ñÒÔ×îºóÒ»¸ö¹Ø¼üÖ¡Îª½áÎ²¡£ */
+	/** è®¾ç½®æ˜¯å¦ä»¥æœ€åä¸€ä¸ªå…³é”®å¸§ä¸ºç»“å°¾ã€‚ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void SetTimelineLengthMode(ETimelineLengthMode NewLengthMode);
 
-	/** ÉèÖÃÊÇ·ñºöÂÔÊ±¼äÅòÕÍ */
+	/** è®¾ç½®æ˜¯å¦å¿½ç•¥æ—¶é—´è†¨èƒ€ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void SetIgnoreTimeDilation(bool bNewIgnoreTimeDilation);
 
-	/** ·µ»ØÊÇ·ñºöÂÔÊ±¼äÅòÕÍ */
+	/** è¿”å›æ˜¯å¦å¿½ç•¥æ—¶é—´è†¨èƒ€ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		bool GetIgnoreTimeDilation() const;
 
-	/** ¸ü¸ÄÒÑÓĞµÄFloat¹ìµÀµÄÇúÏß */
+	/** æ›´æ”¹å·²æœ‰çš„Floatè½¨é“çš„æ›²çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void ChangeFloatTrackCurve(UCurveFloat* NewFloatCurve, FName FloatTrackName);
 
-	/** ¸ü¸ÄÒÑÓĞµÄVector¹ìµÀµÄÇúÏß */
+	/** æ›´æ”¹å·²æœ‰çš„Vectorè½¨é“çš„æ›²çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void ChangeVectorTrackCurve(UCurveVector* NewVectorCurve, FName VectorTrackName);
 
-	/** ¸ü¸ÄÒÑÓĞµÄLinearColor¹ìµÀµÄÇúÏß */
+	/** æ›´æ”¹å·²æœ‰çš„LinearColorè½¨é“çš„æ›²çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void ChangeLinearColorTrackCurve(UCurveLinearColor* NewLinearColorCurve, FName LinearColorTrackName);
 
-	/** ¸ü¸ÄÒÑÓĞµÄEvent¹ìµÀµÄÇúÏß */
+	/** æ›´æ”¹å·²æœ‰çš„Eventè½¨é“çš„æ›²çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void ChangeEventTrackCurve(UCurveFloat* NewFloatCurve, const FName&  EventTrackName);
 
-	/** ·µ»ØÊ±¼äÏßµÄEventº¯ÊıÇ©Ãû¡£ÓĞÊ²Ã´ÓÃ£¿ÎÒÒ²²»ÖªµÀ */
+	/** è¿”å›æ—¶é—´çº¿çš„Eventå‡½æ•°ç­¾åã€‚æœ‰ä»€ä¹ˆç”¨ï¼Ÿæˆ‘ä¹Ÿä¸çŸ¥é“ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		static UFunction* GetTimelineEventSignature();
-	/** ·µ»ØÊ±¼äÏßµÄFloatº¯ÊıÇ©Ãû¡£ÓĞÊ²Ã´ÓÃ£¿ÎÒÒ²²»ÖªµÀ */
+	/** è¿”å›æ—¶é—´çº¿çš„Floatå‡½æ•°ç­¾åã€‚æœ‰ä»€ä¹ˆç”¨ï¼Ÿæˆ‘ä¹Ÿä¸çŸ¥é“ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		static UFunction* GetTimelineFloatSignature();
-	/** ·µ»ØÊ±¼äÏßµÄVectorº¯ÊıÇ©Ãû¡£ÓĞÊ²Ã´ÓÃ£¿ÎÒÒ²²»ÖªµÀ */
+	/** è¿”å›æ—¶é—´çº¿çš„Vectorå‡½æ•°ç­¾åã€‚æœ‰ä»€ä¹ˆç”¨ï¼Ÿæˆ‘ä¹Ÿä¸çŸ¥é“ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		static UFunction* GetTimelineVectorSignature();
-	/** ·µ»ØÊ±¼äÏßµÄLinearColorº¯ÊıÇ©Ãû¡£ÓĞÊ²Ã´ÓÃ£¿ÎÒÒ²²»ÖªµÀ */
+	/** è¿”å›æ—¶é—´çº¿çš„LinearColorå‡½æ•°ç­¾åã€‚æœ‰ä»€ä¹ˆç”¨ï¼Ÿæˆ‘ä¹Ÿä¸çŸ¥é“ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		static UFunction* GetTimelineLinearColorSignature();
 
-	/** »ñÈ¡Ö¸¶¨º¯ÊıµÄÇ©ÃûÀàĞÍ¡£ÓĞÊ²Ã´ÓÃ£¿ÎÒÒ²²»ÖªµÀ */
+	/** è·å–æŒ‡å®šå‡½æ•°çš„ç­¾åç±»å‹ã€‚æœ‰ä»€ä¹ˆç”¨ï¼Ÿæˆ‘ä¹Ÿä¸çŸ¥é“ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		static ETimelineSigType GetTimelineSignatureForFunction(const UFunction* InFunc);
 
-	/** Ìí¼ÓÒ»¸öEvent¹ìµÀµ½µ±Ç°Ê±¼äÏß */
+	/** æ·»åŠ ä¸€ä¸ªEventè½¨é“åˆ°å½“å‰æ—¶é—´çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|AddTrack")
 		void AddEventTrack(FAdvEventTrackInfo InEventTrack, bool& bIsSuccess);
 
-	/** Ìí¼ÓÒ»¸öVector¹ìµÀµ½µ±Ç°Ê±¼äÏß */
+	/** æ·»åŠ ä¸€ä¸ªVectorè½¨é“åˆ°å½“å‰æ—¶é—´çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|AddTrack")
 		void AddVectorTrack(FAdvVectorTrackInfo InVectorTrack, bool& bIsSuccess);
 
-	/** Ìí¼ÓÒ»¸öFloat¹ìµÀµ½µ±Ç°Ê±¼äÏß */
+	/** æ·»åŠ ä¸€ä¸ªFloatè½¨é“åˆ°å½“å‰æ—¶é—´çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|AddTrack")
 		void AddFloatTrack(FAdvFloatTrackInfo InFloatTrack, bool& bIsSuccess);
 
-	/** Ìí¼ÓÒ»¸öLinearColor¹ìµÀµ½µ±Ç°Ê±¼äÏß */
+	/** æ·»åŠ ä¸€ä¸ªLinearColorè½¨é“åˆ°å½“å‰æ—¶é—´çº¿ */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|AddTrack")
 		void AddLinearColorTrack(FAdvLinearColorTrackInfo InLinearColorTrack, bool& bIsSuccess);
 
-	/** ÉèÖÃµ±Ç°Ê±¼äÏß¸úUpdate¹ØÁªEvent */
+	/** è®¾ç½®å½“å‰æ—¶é—´çº¿è·ŸUpdateå…³è”Event */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Event")
 		void SetUpdateEvent(FOnTimelineEvent NewTimelinePostUpdateFunc);
 
-	/** ÉèÖÃµ±Ç°Ê±¼äÏß¸úFinished¹ØÁªµÄEvent */
+	/** è®¾ç½®å½“å‰æ—¶é—´çº¿è·ŸFinishedå…³è”çš„Event */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Event")
 		void SetFinishedEvent(const FOnTimelineEvent& NewTimelineFinishedFunc);
-	/** ¾²Ì¬µÄFinishedEventÓÉÓÚ²»ÄÜÔÚÀ¶Í¼ÄÚÊ¹ÓÃ£¬¹ÊÆúÖ®(Ò»°ãÒ²Ã»±ØÒªÊ¹ÓÃ°É~ÕæÓĞĞèÒªÇë²Î¿¼Timeline.cppÀïÃæµÄSetFinishedEvent) */
+	/** é™æ€çš„FinishedEventç”±äºä¸èƒ½åœ¨è“å›¾å†…ä½¿ç”¨ï¼Œæ•…å¼ƒä¹‹(ä¸€èˆ¬ä¹Ÿæ²¡å¿…è¦ä½¿ç”¨å§~çœŸæœ‰éœ€è¦è¯·å‚è€ƒTimeline.cppé‡Œé¢çš„SetFinishedEvent) */
 
-	/** ·µ»ØÈ«²¿ÇúÏßÏà¹ØµÄÊı¾İ */
+	/** è¿”å›å…¨éƒ¨æ›²çº¿ç›¸å…³çš„æ•°æ® */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		void GetAllTrackData(TArray<UCurveBase*>& OutCurves, TSet<FName>& OutTrackName, TArray<FName>& OutFuncName) const;
+		void GetAllTrackData(TArray<UCurveBase*>& OutCurves, TArray<FName>& OutTrackName, TArray<FName>& OutFuncName) const;
 
-	/** ·µ»ØÈÎºÎÒ»ÌõÊ±¼äÏßÖĞ×îºóÒ»¸ö¹Ø¼üÖ¡µÄÊ±¼äÖµ(²»ÊÇÇúÏßÖĞµÄ£¬ÊÇÕû¸öÊ±¼äÏßµÄ) */
+	/** è¿”å›ä»»ä½•ä¸€æ¡æ—¶é—´çº¿ä¸­æœ€åä¸€ä¸ªå…³é”®å¸§çš„æ—¶é—´å€¼(ä¸æ˜¯æ›²çº¿ä¸­çš„ï¼Œæ˜¯æ•´ä¸ªæ—¶é—´çº¿çš„) */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		float GetLastKeyframeTime() const;
+		float GetTrackLastKeyframeTime() const;
 
-	/** ·µ»ØÈÎºÎÒ»ÌõÇúÏßµÄ×îºóÒ»¸ö¹Ø¼üÖ¡µÄÊ±¼äÖµ(ÊÇÇúÏßÖĞµÄ£¬²»ÊÇÊ±¼äÏßµÄ) */
+	/** è¿”å›ä»»ä½•ä¸€æ¡æ›²çº¿çš„æœ€åä¸€ä¸ªå…³é”®å¸§çš„æ—¶é—´å€¼(æ˜¯æ›²çº¿ä¸­çš„ï¼Œä¸æ˜¯æ—¶é—´çº¿çš„) */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		float GetCurveLastKeyframeTime(ETrackType InTrackType,UCurveBase* InCurve) const;
 
-	/** ÓÉÓÚFTimelineµÄÏŞÖÆĞÔ£¬ÎªÁË¸üºÃµÄ²Ù×÷EventTrack£¬¹ÊÖØĞ´TickTimeline */
-	//TODO: Ë¼Â·´íÁË£¬µÈ´ıÖØĞ´
+	/** ç”±äºFTimelineçš„é™åˆ¶æ€§ï¼Œä¸ºäº†æ›´å¥½çš„æ“ä½œEventTrackï¼Œæ•…é‡å†™TickTimeline */
+	//TODO: æ€è·¯é”™äº†ï¼Œç­‰å¾…é‡å†™
 	void TickAdvTimeline(float DeltaTime);
 
-	//TODO: Çå¿Õ¼¸¸ö¹ìµÀµÄ¹Ø¼üÖ¡
+	//TODO: æ¸…ç©ºå‡ ä¸ªè½¨é“çš„å…³é”®å¸§
 	// void ClearTrack();
 		
-	//TODO: É¾³ı¹ìµÀÉÏÄ³¸öÊ±¼äµãµÄ¹Ø¼üÖ¡£¬Ã»ÓĞÕÒµ½·µ»Øfalse£¬É¾³ıÍê·µ»Øtrue
+	//TODO: åˆ é™¤è½¨é“ä¸ŠæŸä¸ªæ—¶é—´ç‚¹çš„å…³é”®å¸§ï¼Œæ²¡æœ‰æ‰¾åˆ°è¿”å›falseï¼Œåˆ é™¤å®Œè¿”å›true
 	// void DelTrackKey();
 
-	//TODO: É¾³ı¹ìµÀ
+	//TODO: åˆ é™¤è½¨é“
 	// void DelTrack();
 
-	//TODO: ·µ»ØÖ¸¶¨Ãû³Æ¹ìµÀÉÏµÄËùÓĞ¹Ø¼üÖ¡Ê±¼äµã
-	// TSet<float> GetAllKeyTimeForTrack();
+	//TODO: è¿”å›æŒ‡å®šåç§°è½¨é“ä¸Šçš„æ‰€æœ‰å…³é”®å¸§æ—¶é—´ç‚¹
+	// TArray<float> GetAllKeyTimeForTrack();
 };
