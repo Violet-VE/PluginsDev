@@ -340,7 +340,7 @@ void UAdvancedTimelineComponent::ChangeLinearColorTrackCurve(UCurveLinearColor* 
 	}
 }
 
-void UAdvancedTimelineComponent::ChangeEventTrackCurve(UCurveFloat* NewFloatCurve,const FName& EventTrackName)
+void UAdvancedTimelineComponent::ChangeEventTrackCurve(UCurveFloat* NewFloatCurve,FName EventTrackName)
 {
 	bool bFoundTrack = false;
 	if (EventTrackName != NAME_None && AdvEventTracks.Num()>0)
@@ -454,12 +454,12 @@ void UAdvancedTimelineComponent::AddLinearColorTrack(FAdvLinearColorTrackInfo In
 
 void UAdvancedTimelineComponent::SetUpdateEvent(FOnTimelineEvent NewTimelinePostUpdateFunc)
 {
-	TimelinePostUpdateFunc = NewTimelinePostUpdateFunc;
+	TimelineUpdateFunc = NewTimelinePostUpdateFunc;
 }
 
 void UAdvancedTimelineComponent::SetFinishedEvent(const FOnTimelineEvent& NewTimelineFinishedFunc)
 {
-	TimelineFinishedFunc = NewTimelineFinishedFunc;
+	TimelineFinishFunc = NewTimelineFinishedFunc;
 }
 
 void UAdvancedTimelineComponent::TickAdvTimeline(float DeltaTime)
@@ -499,7 +499,7 @@ void UAdvancedTimelineComponent::TickAdvTimeline(float DeltaTime)
 				else
 				{
 					NewPosition = TimelineLength;
-					Reset();
+					Pause();
 					bIsFinished = true;
 				}
 			}
@@ -541,7 +541,7 @@ void UAdvancedTimelineComponent::TickAdvTimeline(float DeltaTime)
 
 	// Notify user that timeline finished
 	if (bIsFinished)
-		TimelineFinishedFunc.ExecuteIfBound();
+		TimelineFinishFunc.ExecuteIfBound();
 }
 
 void UAdvancedTimelineComponent::GetAllTrackData(TArray<UCurveBase*>& OutCurves,TArray<FName>& OutTrackName,TArray<FName>& OutFuncName) const

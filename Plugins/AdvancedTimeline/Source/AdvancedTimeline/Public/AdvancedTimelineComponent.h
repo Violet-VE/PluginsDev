@@ -37,6 +37,10 @@ struct FAdvTrackInfoBase
 {
 	GENERATED_USTRUCT_BODY()
 public:
+	FAdvTrackInfoBase()
+		: TrackType(ETrackType::EventTrack),
+		TrackName(NAME_None)
+	{}
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		ETrackType TrackType;
@@ -49,9 +53,10 @@ struct FAdvEventTrackInfo : public FAdvTrackInfoBase
 {
 	GENERATED_USTRUCT_BODY()
 public:
-	//FAdvEventTrackInfo() 
-	//	: Super::TrackType(ETrackType::EventTrack)
-	//{}
+	FAdvEventTrackInfo()
+	{
+		this->TrackType = ETrackType::EventTrack;
+	}
 
 	/** Curve object used to store keys */
 	UPROPERTY(EditAnywhere,BlueprintReadWrite)
@@ -65,6 +70,10 @@ struct FAdvFloatTrackInfo : public FAdvTrackInfoBase
 {
 	GENERATED_USTRUCT_BODY()
 public:
+	FAdvFloatTrackInfo()
+	{
+		this->TrackType = ETrackType::FloatTrack;
+	}
 
 		/** Curve object used to store keys */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -78,6 +87,10 @@ struct FAdvVectorTrackInfo : public FAdvTrackInfoBase
 {
 	GENERATED_USTRUCT_BODY()
 public:
+	FAdvVectorTrackInfo()
+	{
+		this->TrackType = ETrackType::VectorTrack;
+	}
 
 		/** Curve object used to store keys */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -91,6 +104,10 @@ struct FAdvLinearColorTrackInfo : public FAdvTrackInfoBase
 {
 	GENERATED_USTRUCT_BODY()
 public:
+	FAdvLinearColorTrackInfo()
+	{
+		this->TrackType = ETrackType::LinearColorTrack;
+	}
 
 		/** Curve object used to store keys */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -131,14 +148,6 @@ class  UAdvancedTimelineComponent : public UActorComponent
 	/** How fast we should play through the timeline */
 	UPROPERTY()
 		float PlayRate;
-
-	/** Called whenever this timeline is playing and updates - done after all delegates are executed and variables updated  */
-	UPROPERTY()
-		FOnTimelineEvent TimelinePostUpdateFunc;
-
-	/** Called whenever this timeline is finished. Is not called if 'stop' is used to terminate timeline early  */
-	UPROPERTY()
-		FOnTimelineEvent TimelineFinishedFunc;
 
 
 
@@ -262,7 +271,7 @@ class  UAdvancedTimelineComponent : public UActorComponent
 
 	/** 更改已有的Event轨道的曲线 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void ChangeEventTrackCurve(UCurveFloat* NewFloatCurve, const FName&  EventTrackName);
+		void ChangeEventTrackCurve(UCurveFloat* NewFloatCurve, FName  EventTrackName);
 
 	/** 返回时间线的Event函数签名。有什么用？我也不知道 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
