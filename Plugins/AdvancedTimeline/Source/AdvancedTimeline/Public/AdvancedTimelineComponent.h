@@ -3,343 +3,274 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "UObject/ObjectMacros.h"
 #include "Components/ActorComponent.h"
-#include "Components/TimelineComponent.h"
-#include "Engine/TimelineTemplate.h"
-#include "DeclarativeSyntaxSupport.h"
+#include "AdvancedTimelineData.h"
 #include "AdvancedTimelineComponent.generated.h"
 
-/** 管理事件轨道的结构体。
- *	官方是把所有事件轨道都塞在了一起：
- *		参见：FTimeline::AddEvent(...)
- *	官方会把所有的事件函数和对应的时间保存在一个结构体中，这样就形成了同样的时间会有不同的对应函数(或许会更方便执行？)
- *	不过这样不方便区分哪些函数是哪个事件轨道的。
- *	不过因为官方的Timeline是基于TimelineTemplate的，所以官方把事件函数和对应的曲线等信息都存在FTTEventTrack结构体中。
- *	而FTTEventTrack结构体是继承自FTTTrackBase的，FTTTrackBase具有对应的FName，而FTTEventTrack额外保存了UCurveFloat*。
- *	所以官方可以对应到，因为存在了TimelineTemplate中。不过此举较为绕，故本插件直接讲曲线和对应的函数合并在了一起，由本插件自己管理一个事件轨道。
- *
- *	因为引擎自带FTimeline各种Private的原因，导致本插件自己重写了一遍。因为不需要实现Timeline节点，所以这个插件应该是不用加入蓝图/Actor的初始化创建等流程的。
- */
+/** 高级时间线。
+ *	因为官方的时间线在蓝图中不是很好用，所以自己写了一个......
+ **/
 
- /** Whether or not the timeline should be finished after the specified length, or the last keyframe in the tracks */
-UENUM(BlueprintType)
-enum class ETrackType : uint8
-{
-	EventTrack			UMETA(DisplayName = "Event"),
-	FloatTrack			UMETA(DisplayName = "Float"),
-	VectorTrack			UMETA(DisplayName = "Vector"),
-	LinearColorTrack	UMETA(DisplayName = "LinearColor"),
-};
+/** TODO:
+ *	1. 注释
+ *	2. Get和Set内容完善
+ *	3. 一个时间线对应一个Settings，一个轨道对应一个曲线，一个时间线对应N个轨道，一个曲线对应N个关键帧
+ *	4. 有默认值的参数CPP内加注释
+ **/
 
-USTRUCT(BlueprintType)
-struct FAdvTrackInfoBase
-{
-	GENERATED_USTRUCT_BODY()
-public:
-	FAdvTrackInfoBase()
-		: TrackType(ETrackType::EventTrack),
-		TrackName(NAME_None)
-	{}
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		ETrackType TrackType;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FName TrackName;
-};
-
-USTRUCT(BlueprintType)
-struct FAdvEventTrackInfo : public FAdvTrackInfoBase
-{
-	GENERATED_USTRUCT_BODY()
-public:
-	FAdvEventTrackInfo()
-	{
-		this->TrackType = ETrackType::EventTrack;
-	}
-
-	/** Curve object used to store keys */
-	UPROPERTY(EditAnywhere,BlueprintReadWrite)
-		UCurveFloat* EventCurve;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineEvent OnEventFunc;
-};
-
-USTRUCT(BlueprintType)
-struct FAdvFloatTrackInfo : public FAdvTrackInfoBase
-{
-	GENERATED_USTRUCT_BODY()
-public:
-	FAdvFloatTrackInfo()
-	{
-		this->TrackType = ETrackType::FloatTrack;
-	}
-
-		/** Curve object used to store keys */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		UCurveFloat* FloatCurve;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineFloat OnEventFunc;
-};
-
-USTRUCT(BlueprintType)
-struct FAdvVectorTrackInfo : public FAdvTrackInfoBase
-{
-	GENERATED_USTRUCT_BODY()
-public:
-	FAdvVectorTrackInfo()
-	{
-		this->TrackType = ETrackType::VectorTrack;
-	}
-
-		/** Curve object used to store keys */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		UCurveVector* VectorCurve;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineVector OnEventFunc;
-};
-
-USTRUCT(BlueprintType)
-struct FAdvLinearColorTrackInfo : public FAdvTrackInfoBase
-{
-	GENERATED_USTRUCT_BODY()
-public:
-	FAdvLinearColorTrackInfo()
-	{
-		this->TrackType = ETrackType::LinearColorTrack;
-	}
-
-		/** Curve object used to store keys */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		UCurveLinearColor* LinearColorCurve;
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineLinearColor OnEventFunc;
-};
-
-UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
-class  UAdvancedTimelineComponent : public UActorComponent
+UCLASS(BlueprintType,meta=(BlueprintSpawnableComponent))
+class ADVANCEDTIMELINE_API UAdvancedTimelineComponent : public UActorComponent
 {
 	GENERATED_UCLASS_BODY()
 
-	/** 时间线中的当前位置 */
+public:
+
+	#pragma region
+	/** 一个时间线对应多个轨道，但是同步播放
+	 *	一个时间线对应一个配置
+	 **/
+	UPROPERTY()
+		TMap<FTimelineInfo, FTimelineSetting> Timelines;
+	UPROPERTY()
+		TMap<FString, FTimelineSetting> SettingList;
+	/** 记录播放状态 */
+	UPROPERTY()
+		EPlayStatus PlayStatus;
+	/** 记录当前位置 */
 	UPROPERTY()
 		float Position;
-
-	/** Specified how the timeline determines its own length (e.g. specified length, last keyframe) */
+	/** 记录是否正在播放 */
 	UPROPERTY()
-		TEnumAsByte<ETimelineLengthMode> LengthMode;
-
-	/** Whether timeline should loop when it reaches the end, or stop */
+		float IsPlaying;
+	/** 记录是否停止了播放(暂停也是停止) */
 	UPROPERTY()
-		uint8 bLooping : 1;
-
-	/** If playback should move the current position backwards instead of forwards */
-	UPROPERTY()
-		uint8 bReversePlayback : 1;
-
-	/** Are we currently playing (moving Position) */
-	UPROPERTY()
-		uint8 bPlaying : 1;
-
-	/** How long the timeline is, will stop or loop at the end */
-	UPROPERTY()
-		float Length;
-
-	/** How fast we should play through the timeline */
-	UPROPERTY()
-		float PlayRate;
+		float IsStop;
+	#pragma endregion 变量
 
 
-
-
-
-
-	/** 如果全局时间膨胀应该被这条时间线忽略，则为真，否则为假。
-	*	时间膨胀就是某些游戏提供的多倍速或弹出UI时的世界缓时。(或许也能以此来设置暂停游戏？)
-	**/
-	UPROPERTY()
-		uint8 bIgnoreTimeDilation : 1;
-
-	/** 保存了四个不同类型的轨道的相关信息。一个时间线可以有多个轨道，其内容除了名称也可以相同。 */
-	UPROPERTY()
-		TArray<FAdvEventTrackInfo> AdvEventTracks;
-	UPROPERTY()
-		TArray<FAdvFloatTrackInfo> AdvFloatTracks;
-	UPROPERTY()
-		TArray<FAdvVectorTrackInfo> AdvVectorTracks;
-	UPROPERTY()
-		TArray<FAdvLinearColorTrackInfo> AdvLinearColorTracks;
-
-	/** Called whenever this timeline is playing and updates - done after all delegates are executed and variables updated  */
-	UPROPERTY()
-		FOnTimelineEvent TimelineUpdateFunc;
-
-	/** Called whenever this timeline is finished. Is not called if 'stop' is used to terminate timeline early  */
-	UPROPERTY()
-		FOnTimelineEvent TimelineFinishFunc;
-
-	//~ Begin ActorComponent Interface.
+	#pragma region
+	/** ~ Begin ActorComponent Interface. */
 	virtual void Activate(bool bReset = false) override;
 	virtual void Deactivate() override;
 	virtual bool IsReadyForOwnerToAutoDestroy() const override;
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
-	//~ End ActorComponent Interface.
+	/** ~ End ActorComponent Interface. */
+	#pragma endregion 覆盖的虚函数
 
 
-	/** 开始播放时间线 */
+	#pragma region
+	/** 返回时间线(一个项目可以有多条时间线) */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		void GetTimelineInfo(const FString InTimelineGuid, FTimelineInfo & OutTimelineInfo);
+	/** 返回时间线设置(一个时间线应该对应一个设置(可以尝试多个设置，类似于软件的多配置选择)) */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		void GetTimelineSettings(const FString InSettingName, const FString InSettingGuid, FTimelineSetting & OutTimelineSettings);
+	/** 获取指定轨道当前的播放位置。 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		float GetPlaybackPosition(const FString InTrackGuid);
+	/** 获取是否忽略了全局的时间膨胀 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		bool GetIgnoreTimeDilation(const FString InTimelineGuid);
+	/** 获取指定轨道的播放速度 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		float GetPlayRate(const FString InTrackGuid);
+	/** 获取指定轨道的时间模式 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		ELengthMode GetLengthMode(const FString InTrackGuid);
+	/** 获取指定轨道是否开启了循环 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		bool GetIsLoop(const FString InTrackGuid);
+	/** 判断是否只有暂停的轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		bool GetIsPause(const FString InTimelineGuid);
+	/** 判断是否只有正在播放的轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		bool GetIsPlaying(const FString InTimelineGuid);
+	/** 判断是否全部停止播放了 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		bool GetIsStop(const FString InTimelineGuid);
+	/** 获取全部Float轨道的信息 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		void GetAllFloatTracksInfo(const FString InTimelineGuid, TArray<FFloatTrackInfo> & OutFloatTracks);
+	/** 获取全部事件轨道的信息 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		void GetAllEventTracksInfo(const FString InTimelineGuid, TArray<FEventTrackInfo> & OutEventTracks);
+	/** 获取全部Vector轨道的信息 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		void GetAllVectorTracksInfo(const FString InTimelineGuid, TArray<FVectorTrackInfo> & OutVectorTracks);
+	/** 获取全部LinearColor轨道的信息 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		void GetAllLinearColorTracksInfo(const FString InTimelineGuid, TArray<FLinearColorTrackInfo> & OutLinearColorTracks);
+	/** 获取时间线中轨道的总数量 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		int GetTrackCount(const FString InTimelineGuid);
+	/** 获取时间线中最小关键帧时间 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		float GetMinKeyframeTime(const FString InTimelineGuid);
+	/** 获取时间线中最大关键帧时间 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		float GetMaxKeyframeTime(const FString InTimelineGuid);
+	/** 获取时间线中最大结束时间 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		float GetMaxEndTime(const FString InTimelineGuid);
+	#pragma endregion Get
+
+
+	#pragma region
+	/** 添加全局的每帧执行的事件函数，反复添加会覆盖，决定好再加 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
+		void AddUpdateCallback(const FString InTimelineGuid, const FOnTimelineEvent InUpdateEvent);
+	/** 添加结束时执行的函数到轨道，反复添加会覆盖 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
+		void AddFinishedCallback(const FString InTimelineGuid, const FOnTimelineEvent InFinishedEvent);
+	/** 添加时间线，因为默认有一个(一个项目可以有多条时间线) */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
+		void AddTimelineInfo(const FTimelineInfo InTimeline, const FTimelineSetting InTimelineSetting);
+	/** 添加配置到配置列表，方便管理 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
+		void AddSettingToList(const FTimelineSetting InTimelineSetting);
+	/** 添加一个Float轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
+		void AddFloatTrack(const FString InTimelineGuid, const FFloatTrackInfo InFloatTrack);
+	/** 添加一个事件轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
+		void AddEventTrack(const FString InTimelineGuid, const FEventTrackInfo InEventTrack);
+	/** 添加一个Vector轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
+		void AddVectorTrack(const FString InTimelineGuid, const FVectorTrackInfo InVectorTrack);
+	/** 添加一个LinearColor轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
+		void AddLinearColorTrack(const FString InTimelineGuid, const FLinearColorTrackInfo InLinearColorTrack);
+	/** 添加轨道(通用) */
+	UFUNCTION(BlueprintCallable, CustomThunk, meta = (CustomStructureParam = "InTrack"), Category = "AdvancedTimeline|Add")
+		void AddTrack(const FString InTimelineGuid, const EAdvTimelineType InTrackType, const int32& InTrack);
+		void GenericAddTrack(const FString InTimelineGuid, const EAdvTimelineType InTrackType, const UScriptStruct* StructType, const void* InTrack);
+	DECLARE_FUNCTION(execAddTrack)
+	{
+		P_GET_PROPERTY(UStrProperty, Z_Param_InTimelineGuid);
+		P_GET_ENUM(EAdvTimelineType, Z_Param_InTrackType);
+		Stack.Step(Stack.Object, nullptr);
+		UStructProperty* StructProperty = ExactCast<UStructProperty>(Stack.MostRecentProperty);
+		void* StructPtr = Stack.MostRecentPropertyAddress;
+		P_FINISH;
+
+		P_NATIVE_BEGIN;
+		P_THIS->GenericAddTrack(Z_Param_InTimelineGuid, EAdvTimelineType(Z_Param_InTrackType), StructProperty->Struct, StructPtr);
+		P_NATIVE_END;
+	}
+	#pragma endregion Add
+
+
+	#pragma region
+	/** 设置轨道的结束时间 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void SetLength(const FString InTrackGuid, const float InNewTime);
+	/** 设置是否忽略了全局的时间膨胀 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void SetIgnoreTimeDilation(const FString InTimelineGuid, const bool IsIgnoreTimeDilation);
+	/** 设置指定轨道的播放位置，可以拿来做跳转
+	 *	@param bIsFireEvent指示更改位置后是否触发一次事件
+	 *	@param bIsFireUpdate指示更改位置后是否触发一次Update
+	 *	@param bIsFirePlay指示更改位置后是否继续播放
+	 **/
+	UFUNCTION(BlueprintCallable, meta = (AdvancedDisplay = 3), Category = "AdvancedTimeline|Set")
+		void SetPlaybackPosition(const FString InTrackGuid, const float InNewTime, const bool bIsFireEvent, const bool bIsFireUpdate = true, const bool bIsFirePlay = true);
+	/** 设置轨道的播放速度 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void SetTrackPlayRate(const FString InTrackGuid, const float InNewPlayRate);
+	/** 设置轨道的时间模式 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void SetTrackTimeMode(const FString InTrackGuid, const ELengthMode InEndTimeMode);
+	/** 设置是否循环整个时间线 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void SetTimelineLoop(const FString InTimelineGuid, const bool bIsLoop);
+	/** 设置是否循环轨道，注意时间线和轨道只能设置一个设置了时间线就会覆盖轨道的设置 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void SetTrackLoop(const FString InTrackGuid, const bool bIsLoop);
+	/** 设置是否自动播放整个时间线 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void SetTimelineAutoPlay(const FString InTimelineGuid, const bool bIsAutoPlay);
+	/** 设置是否自动播放某个轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void SetTrackAutoPlay(const FString InTrackGuid, const bool bIsAutoPlay);
+	/** 设置整个时间线的播放速度 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void SetTimelinePlayRate(const FString InTimelineGuid, const float InNewPlayRate);
+	/** 更改轨道的曲线 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void ChangeTrackCurve(const FString InTrackGuid, const UCurveBase* InCurve);
+	/** 更改时间线名称(可能没啥意义) */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void ChangeTimelineName(const FString InTimelineGuid, const FText InNewName);
+	/** 更改配置名称*/
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void ChangeSettingName(const FString InSettingGuid, const FText InNewName);
+	/** 更改轨道名称 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
+		void ChangeTrackName(const FString InTrackGuid, const FString InNewName);
+	#pragma endregion Set
+
+
+	#pragma region
+	/** 播放时间线 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
-		void Play(bool bIsFromStart=false);
-
-	/** 开始反向播放时间线 */
+		void Play(const FString InTimelineGuid, const EPlayMethod PlayMethod = EPlayMethod::Play);
+	/** 停止播放时间线，或者暂停 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
-		void Reverse(bool bIsFromEnd=false);
-
-	/** 暂停播放时间线 */
+		void Stop(const FString InTimelineGuid, const bool bIsPause = false);
+	/** 重置时间线到默认 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
-		void Pause();
-
-	/** 停止播放时间线，且播放位置归0 */
+		void ResetTimeline(const FString InTimelineGuid);
+	/** 清空时间线 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
-		void Reset();
+		void ClearTimelineTracks(const FString InTimelineGuid);
+	/** 清空轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
+		void ResetTrack(const FString InTrackGuid);
+	/** 删除轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
+		void DelTrack(const FString InTrackGuid);
+	/** 更改时间线相对于的设置，原有的设置会返回，便于保存 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
+		void ApplySettingToTimeline(const FString InSettingsGuid, const FString InTimelineGuid, FString& OutOriginSettingsGuid);
+	/** 删除时间线 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
+		void DelTimeline(const FString InTimelineGuid);
+	/** 清空时间线中的轨道 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
+		void ClearTimelines();
+	/** 清空配置列表(正在使用中的(即存在Timelines中的)不会清除) */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control")
+		void ClearSettingList();
+	#pragma endregion Control
 
-	/** 返回是否正在播放 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Determining")
-		bool IsPlaying() const;
-
-	/** 返回是否正在反向播放 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Determining")
-		bool IsReversing() const;
-
-	/** 跳转播放位置。因为TickTimeline重写的缘故，顺手重写了SetPlaybackPosition
-	  * @param 如果 bFireEvents 是 true，跳转之后触发一次Event
-	  * @param 如果 bFireEvents 是 true，跳转之后触发一次Update
-	 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Control", meta = (AdvancedDisplay = 1/* 除了前1个参数都是高级参数 */))
-		void SetPlaybackPosition(float NewPosition, bool bFireEvents = false, bool bFireUpdate = true, bool bIsPlay = false);
-
-	/** 返回当前播放位置(s) */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		float GetPlaybackPosition() const;
-
-	/** 设置是否循环 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void SetLooping(bool bNewLooping);
-
-	/** 返回是否循环 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Determining")
-		bool IsLooping() const;
-
-	/** 设置播放速度 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void SetPlayRate(float NewRate);
-
-	/** 返回当前播放速度 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		float GetPlayRate() const;
-
-	/** 返回当前时间线长度 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		float GetTimelineLength() const;
-
-	/** 设置当前时间线长度 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void SetTimelineLength(float NewLength);
-
-	/** 设置是否以最后一个关键帧为结尾。 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void SetTimelineLengthMode(ETimelineLengthMode NewLengthMode);
-
-	/** 设置是否忽略时间膨胀 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void SetIgnoreTimeDilation(bool bNewIgnoreTimeDilation);
-
-	/** 返回是否忽略时间膨胀 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		bool GetIgnoreTimeDilation() const;
-
-	/** 更改已有的Float轨道的曲线 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void ChangeFloatTrackCurve(UCurveFloat* NewFloatCurve, FName FloatTrackName);
-
-	/** 更改已有的Vector轨道的曲线 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void ChangeVectorTrackCurve(UCurveVector* NewVectorCurve, FName VectorTrackName);
-
-	/** 更改已有的LinearColor轨道的曲线 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void ChangeLinearColorTrackCurve(UCurveLinearColor* NewLinearColorCurve, FName LinearColorTrackName);
-
-	/** 更改已有的Event轨道的曲线 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
-		void ChangeEventTrackCurve(UCurveFloat* NewFloatCurve, FName  EventTrackName);
-
-	/** 返回时间线的Event函数签名。有什么用？我也不知道 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		static UFunction* GetTimelineEventSignature();
-	/** 返回时间线的Float函数签名。有什么用？我也不知道 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		static UFunction* GetTimelineFloatSignature();
-	/** 返回时间线的Vector函数签名。有什么用？我也不知道 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		static UFunction* GetTimelineVectorSignature();
-	/** 返回时间线的LinearColor函数签名。有什么用？我也不知道 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		static UFunction* GetTimelineLinearColorSignature();
-
-	/** 获取指定函数的签名类型。有什么用？我也不知道 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		static ETimelineSigType GetTimelineSignatureForFunction(const UFunction* InFunc);
-
-	/** 添加一个Event轨道到当前时间线 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|AddTrack")
-		void AddEventTrack(FAdvEventTrackInfo InEventTrack, bool& bIsSuccess);
-
-	/** 添加一个Vector轨道到当前时间线 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|AddTrack")
-		void AddVectorTrack(FAdvVectorTrackInfo InVectorTrack, bool& bIsSuccess);
-
-	/** 添加一个Float轨道到当前时间线 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|AddTrack")
-		void AddFloatTrack(FAdvFloatTrackInfo InFloatTrack, bool& bIsSuccess);
-
-	/** 添加一个LinearColor轨道到当前时间线 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|AddTrack")
-		void AddLinearColorTrack(FAdvLinearColorTrackInfo InLinearColorTrack, bool& bIsSuccess);
-
-	/** 设置当前时间线跟Update关联Event */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Event")
-		void SetUpdateEvent(FOnTimelineEvent NewTimelinePostUpdateFunc);
-
-	/** 设置当前时间线跟Finished关联的Event */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Event")
-		void SetFinishedEvent(const FOnTimelineEvent& NewTimelineFinishedFunc);
-	/** 静态的FinishedEvent由于不能在蓝图内使用，故弃之(一般也没必要使用吧~真有需要请参考Timeline.cpp里面的SetFinishedEvent) */
-
-	/** 返回全部曲线相关的数据 */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		void GetAllTrackData(TArray<UCurveBase*>& OutCurves, TArray<FName>& OutTrackName, TArray<FName>& OutFuncName) const;
-
-	/** 返回任何一条时间线中最后一个关键帧的时间值(不是曲线中的，是整个时间线的) */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		float GetTrackLastKeyframeTime() const;
-
-	/** 返回任何一条曲线的最后一个关键帧的时间值(是曲线中的，不是时间线的) */
-	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
-		float GetCurveLastKeyframeTime(ETrackType InTrackType,UCurveBase* InCurve) const;
-
-	/** 由于FTimeline的限制性，为了更好的操作EventTrack，故重写TickTimeline */
-	//TODO: 思路错了，等待重写
-	void TickAdvTimeline(float DeltaTime);
-
-	//TODO: 清空几个轨道的关键帧
-	// void ClearTrack();
-		
-	//TODO: 删除轨道上某个时间点的关键帧，没有找到返回false，删除完返回true
-	// void DelTrackKey();
-
-	//TODO: 删除轨道
-	// void DelTrack();
-
-	//TODO: 返回指定名称轨道上的所有关键帧时间点
-	// TArray<float> GetAllKeyTimeForTrack();
+	
+	#pragma region
+	/** 仿官方时间线独立出一个Tick */
+	void TickTimeline(const FString InTimelineGuid, float DeltaTime);
+	/** 根据Guid查询时间线 */
+	bool QueryTimelineByGuid(const FString InTimelineGuid, FTimelineInfo& OutTimelineInfo);
+	/** 根据Guid查询时间线配置 */
+	bool QuerySettingsByGuid(const FString InSettingsGuid, FTimelineSetting& OutTimelineSetting, FTimelineInfo& OutTimeline);
+	/** 根据Guid查询轨道 */
+	bool QueryTrackByGuid(const FString InTrackGuid, EAdvTimelineType& OutTrackType, FTrackInfoBase* & OutTrack, FTimelineInfo& OutTimeline);
+	/** 根据Guid查询曲线 */
+	bool QueryCurveByGuid(const FString InCurveGuid, EAdvTimelineType& OutCurveType, FCurveInfoBase* & OutCurve, FTimelineInfo& OutTimeline);
+	/** 根据Guid查询关键帧 */
+	bool QueryKeyByGuid(const FString InKeyGuid, FString& OutTrackGuid, FKeyInfo* & OutKey, FTimelineInfo& OutTimeline);
+	/** 验证时间线是否有效 */
+	static bool ValidFTimelineInfo(const FTimelineInfo* InTimelineInfo);
+	/** 验证时间线设置是否有效 */
+	static bool ValidFTimelineSetting(const FTimelineSetting* InSettingsInfo);
+	/** 验证轨道是否有效 */
+	static bool ValidFTrackInfo(const FTrackInfoBase* InTrack);
+	/** 验证曲线是否有效 */
+	static bool ValidFCurveInfo(const FCurveInfoBase* InCurve);
+	/** 验证关键帧是否有效 */
+	static bool ValidFKeyInfo(FKeyInfo* InKey);
+	/** 生成默认的Timeline */
+	static void GenerateDefaultTimeline(FTimelineInfo& OutTimeline,FTimelineSetting& OutTimelineSetting);
+	/** 本地化的输出错误信息(UE_LOG) */
+	static void PrintError(const FString InKey,const FString InText);
+	#pragma endregion 不需要加入GC的函数
 };

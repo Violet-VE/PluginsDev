@@ -1,660 +1,416 @@
-﻿// Fill out your copyright notice in the Description page of Project Settings.
+// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "AdvancedTimelineComponent.h"
+
+#include "Culture.h"
 #include "GameFramework/WorldSettings.h"
 #include "Engine/World.h"
 #include "Curves/CurveLinearColor.h"
 #include "Curves/CurveVector.h"
+#include "Engine/Engine.h"
 #include "UObject/Package.h"
+#include "Kismet/KismetGuidLibrary.h"
 
 
 DEFINE_LOG_CATEGORY_STATIC(LogAdvTimeline, Log, All);
 
-UAdvancedTimelineComponent::UAdvancedTimelineComponent(const FObjectInitializer& ObjectInitializer): Super(ObjectInitializer)
-{
-	PrimaryComponentTick.bCanEverTick = true;
-	PrimaryComponentTick.bStartWithTickEnabled = false;
-	PrimaryComponentTick.TickGroup = TG_PrePhysics;
+//本地化
+#define LOCTEXT_NAMESPACE "AdvTimeline"
+/** 本地化指南：
+ *	只需要使用NSLOCTEXT()或者LOCTEXT()就可以了，剩下的操作需要进编辑器打开本地化Dash面板再改
+ */
 
-	LengthMode = TL_LastKeyFrame;
-	bLooping = false;
-	bReversePlayback=false;
-	bPlaying = false;
-	Length = 5.f;
-	PlayRate = 1.f;
-	Position = 0.0f;
-}
-
-void UAdvancedTimelineComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
-{
-	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
-
-	if (bIgnoreTimeDilation)
-	{
-		AActor* const OwnerActor = GetOwner();
-		if (OwnerActor)
-		{
-			DeltaTime /= OwnerActor->GetActorTimeDilation();
-		}
-		else
-		{
-			// 由于某种原因，没有Actor，使用世界时间膨胀作为后备手段。
-			UWorld* const W = GetWorld();
-			if (W)
-			{
-				DeltaTime /= W->GetWorldSettings()->GetEffectiveTimeDilation();
-			}
-		}
-	}
-	TickAdvTimeline(DeltaTime);
-
-	if (!IsNetSimulating())
-	{
-		// Do not deactivate if we are done, since bActive is a replicated property and we shouldn't have simulating
-		// clients touch replicated variables.
-		if (!bPlaying)
-		{
-			Deactivate();
-		}
-	}
-}
-
-void UAdvancedTimelineComponent::Play(bool bIsFromStart)
-{
-	Activate();
-	if (bIsFromStart)
-		SetPlaybackPosition(0.f);
-
-	bReversePlayback = false;
-	bPlaying = true;
-}
-
-void UAdvancedTimelineComponent::Reverse(bool bIsFromEnd)
-{
-	Activate();
-	if (bIsFromEnd)
-		SetPlaybackPosition(GetTimelineLength());
-
-	bReversePlayback = true;
-	bPlaying = true;
-}
-
-void UAdvancedTimelineComponent::Pause()
-{
-	bPlaying = false;
-}
-
-void UAdvancedTimelineComponent::Reset()
-{
-	bPlaying = false;
-	SetPlaybackPosition(0.0f,false);
-}
-
-bool UAdvancedTimelineComponent::IsPlaying() const
-{
-	return bPlaying;
-}
-
-bool UAdvancedTimelineComponent::IsReversing() const
-{
-	return bReversePlayback;
-}
-
-void UAdvancedTimelineComponent::SetPlaybackPosition(float NewPosition, bool bFireEvents, bool bFireUpdate,bool bIsPlay)
-{
-	const float OldPosition = Position;
-	Position = NewPosition;
-
-	// Iterate over each vector interpolation
-	for (const FAdvVectorTrackInfo& CurrentEntry : AdvVectorTracks)
-	{
-		if (CurrentEntry.VectorCurve && CurrentEntry.OnEventFunc.IsBound())
-		{
-			// Get vector from curve
-			FVector const Vec = CurrentEntry.VectorCurve->GetVectorValue(GetPlaybackPosition());
-
-			// Pass vec to specified function
-			CurrentEntry.OnEventFunc.ExecuteIfBound(Vec);
-		}
-	}
-
-	// Iterate over each float interpolation
-	for (const FAdvFloatTrackInfo& CurrentEntry : AdvFloatTracks)
-	{
-		if (CurrentEntry.FloatCurve && CurrentEntry.OnEventFunc.IsBound())
-		{
-			// Get float from func
-			const float Val = CurrentEntry.FloatCurve->GetFloatValue(GetPlaybackPosition());
-
-			// Pass float to specified function
-			CurrentEntry.OnEventFunc.ExecuteIfBound(Val);
-		}
-	}
-
-	// Iterate over each color interpolation
-	for (const FAdvLinearColorTrackInfo& CurrentEntry : AdvLinearColorTracks)
-	{
-		if (CurrentEntry.LinearColorCurve && CurrentEntry.OnEventFunc.IsBound())
-		{
-			// Get vector from curve
-			const FLinearColor Color = CurrentEntry.LinearColorCurve->GetLinearColorValue(GetPlaybackPosition());
-
-			// Pass vec to specified function
-			CurrentEntry.OnEventFunc.ExecuteIfBound(Color);
-		}
-	}
-
-
-	// If we should be firing events for this track...
-	if (bFireEvents)
-	{
-		// If playing sequence forwards.
-		float MinTime, MaxTime;
-		if (!bReversePlayback)
-		{
-			MinTime = OldPosition;
-			MaxTime = Position;
-
-			// Slight hack here.. if playing forwards and reaching the end of the sequence, force it over a little to ensure we fire events actually on the end of the sequence.
-			if (MaxTime == GetTimelineLength())
-			{
-				MaxTime += (float)KINDA_SMALL_NUMBER;
-			}
-		}
-		// If playing sequence backwards.
-		else
-		{
-			MinTime = Position;
-			MaxTime = OldPosition;
-
-			// Same small hack as above for backwards case.
-			if (MinTime == 0.f)
-			{
-				MinTime -= (float)KINDA_SMALL_NUMBER;
-			}
-		}
-
-		// See which events fall into traversed region.
-		for (auto ThisEventTrack : AdvEventTracks)
-		{
-			for (auto It(ThisEventTrack.EventCurve->FloatCurve.GetKeyIterator());It;++It)
-			{
-				float EventTime = It->Time;
-
-				// Need to be slightly careful here and make behavior for firing events symmetric when playing forwards of backwards.
-				bool bFireThisEvent = false;
-				if (!bReversePlayback)
-				{
-					if (EventTime >= MinTime && EventTime < MaxTime)
-					{
-						bFireThisEvent = true;
-					}
-				}
-				else
-				{
-					if (EventTime > MinTime && EventTime <= MaxTime)
-					{
-						bFireThisEvent = true;
-					}
-				}
-
-				if (bFireThisEvent)
-				{
-					ThisEventTrack.OnEventFunc.ExecuteIfBound();
-				}
-			}
-		}
-	}
-	if (bFireUpdate)
-	{
-		TimelineUpdateFunc.ExecuteIfBound();
-	}
-	if (bIsPlay)
-	{
-		Play();
-	}
-}
-
-float UAdvancedTimelineComponent::GetPlaybackPosition() const
-{
-	return Position;
-}
-
-void UAdvancedTimelineComponent::SetLooping(bool bNewLooping)
-{
-	bLooping = bNewLooping;
-}
-
-bool UAdvancedTimelineComponent::IsLooping() const
-{
-	return bLooping;
-}
-
-void UAdvancedTimelineComponent::SetPlayRate(float NewRate)
-{
-	PlayRate = NewRate;
-}
-
-float UAdvancedTimelineComponent::GetPlayRate() const
-{
-	return PlayRate;
-}
-
-float UAdvancedTimelineComponent::GetTimelineLength() const
-{
-	switch (LengthMode)
-	{
-	case TL_TimelineLength:
-		return Length;
-	case TL_LastKeyFrame:
-		return GetTrackLastKeyframeTime();
-	default:
-		UE_LOG(LogAdvTimeline, Error, TEXT("Invalid timeline length mode on timeline!"));
-		return 0.f;
-	}
-}
-
-void UAdvancedTimelineComponent::SetTimelineLength(float NewLength)
-{
-	Length = NewLength;
-}
-
-void UAdvancedTimelineComponent::SetTimelineLengthMode(ETimelineLengthMode NewLengthMode)
-{
-	LengthMode = NewLengthMode;
-}
-
-void UAdvancedTimelineComponent::SetIgnoreTimeDilation(bool bNewIgnoreTimeDilation)
-{
-	bIgnoreTimeDilation = bNewIgnoreTimeDilation;
-}
-
-bool UAdvancedTimelineComponent::GetIgnoreTimeDilation() const
-{
-	return bIgnoreTimeDilation;
-}
-
-void UAdvancedTimelineComponent::ChangeFloatTrackCurve(UCurveFloat* NewFloatCurve, FName FloatTrackName)
-{
-	bool bFoundTrack = false;
-	if (FloatTrackName != NAME_None && AdvFloatTracks.Num() > 0)
-	{
-		for (FAdvFloatTrackInfo& CurrentTrack : AdvFloatTracks)
-		{
-			if (CurrentTrack.TrackName == FloatTrackName)
-			{
-				CurrentTrack.FloatCurve = NewFloatCurve;
-				bFoundTrack = true;
-				break;
-			}
-		}
-	}
-
-	if (!bFoundTrack)
-	{
-		UE_LOG(LogAdvTimeline, Log, TEXT("SetFloatCurve: No float track with name %s!"), *FloatTrackName.ToString());
-	}
-}
-
-void UAdvancedTimelineComponent::ChangeVectorTrackCurve(UCurveVector* NewVectorCurve, FName VectorTrackName)
-{
-	bool bFoundTrack = false;
-	if (VectorTrackName != NAME_None && AdvVectorTracks.Num() > 0)
-	{
-		for (FAdvVectorTrackInfo& CurrentTrack : AdvVectorTracks)
-		{
-			if (CurrentTrack.TrackName == VectorTrackName)
-			{
-				CurrentTrack.VectorCurve = NewVectorCurve;
-				bFoundTrack = true;
-				break;
-			}
-		}
-	}
-
-	if (!bFoundTrack)
-	{
-		UE_LOG(LogAdvTimeline, Log, TEXT("SetFloatCurve: No vector track with name %s!"), *VectorTrackName.ToString());
-	}
-}
-
-void UAdvancedTimelineComponent::ChangeLinearColorTrackCurve(UCurveLinearColor* NewLinearColorCurve,FName LinearColorTrackName)
-{
-	bool bFoundTrack = false;
-	if (LinearColorTrackName != NAME_None && AdvLinearColorTracks.Num() > 0)
-	{
-		for (FAdvLinearColorTrackInfo& CurrentTrack : AdvLinearColorTracks)
-		{
-			if (CurrentTrack.TrackName == LinearColorTrackName)
-			{
-				CurrentTrack .LinearColorCurve = NewLinearColorCurve;
-				bFoundTrack = true;
-				break;
-			}
-		}
-	}
-
-	if (!bFoundTrack)
-	{
-		UE_LOG(LogAdvTimeline, Log, TEXT("SetFloatCurve: No linearcolor track with name %s!"), *LinearColorTrackName.ToString());
-	}
-}
-
-void UAdvancedTimelineComponent::ChangeEventTrackCurve(UCurveFloat* NewFloatCurve,FName EventTrackName)
-{
-	bool bFoundTrack = false;
-	if (EventTrackName != NAME_None && AdvEventTracks.Num()>0)
-	{
-		for (FAdvEventTrackInfo& CurrentTrack : AdvEventTracks)
-		{
-			if (CurrentTrack.TrackName == EventTrackName)
-			{
-				CurrentTrack.EventCurve = NewFloatCurve;
-				bFoundTrack = true;
-				break;
-			}
-		}
-	}
-
-	if (!bFoundTrack)
-	{
-		UE_LOG(LogAdvTimeline, Log, TEXT("SetFloatCurve: No event track with name %s!"), *EventTrackName.ToString());
-	}
-}
-
+// Finished TODO:Wait Valid
 void UAdvancedTimelineComponent::Activate(bool bReset)
 {
 	Super::Activate(bReset);
-	PrimaryComponentTick.SetTickFunctionEnable(true);
 }
 
 void UAdvancedTimelineComponent::Deactivate()
 {
 	Super::Deactivate();
-	PrimaryComponentTick.SetTickFunctionEnable(false);
 }
 
 bool UAdvancedTimelineComponent::IsReadyForOwnerToAutoDestroy() const
 {
-	return !IsPlaying();
+	return Super::IsReadyForOwnerToAutoDestroy();
 }
 
-UFunction* UAdvancedTimelineComponent::GetTimelineEventSignature()
+void UAdvancedTimelineComponent::TickComponent(float DeltaTime, ELevelTick Tick,
+	FActorComponentTickFunction* ThisTickFunction)
 {
-	auto* TimelineEventSig = FindObject<UFunction>(FindPackage(nullptr, TEXT("/Script/Engine")), TEXT("OnTimelineEvent__DelegateSignature"));
-	check(TimelineEventSig != NULL)
-	return TimelineEventSig;
+	Super::TickComponent(DeltaTime, Tick, ThisTickFunction);
 }
 
-UFunction* UAdvancedTimelineComponent::GetTimelineFloatSignature()
+void UAdvancedTimelineComponent::GetTimelineInfo(const FString InTimelineGuid, FTimelineInfo& OutTimelineInfo)
 {
-	auto* TimelineFloatSig = FindObject<UFunction>(FindPackage(nullptr, TEXT("/Script/Engine")), TEXT("OnTimelineFloat__DelegateSignature"));
-	check(TimelineFloatSig != NULL)
-	return TimelineFloatSig;
 }
 
-UFunction* UAdvancedTimelineComponent::GetTimelineVectorSignature()
+void UAdvancedTimelineComponent::GetTimelineSettings(const FString InSettingName, const FString InSettingGuid,
+	FTimelineSetting& OutTimelineSettings)
 {
-	auto* TimelineVectorSig = FindObject<UFunction>(FindPackage(nullptr, TEXT("/Script/Engine")), TEXT("OnTimelineVector__DelegateSignature"));
-	check(TimelineVectorSig != NULL)
-	return TimelineVectorSig;
 }
 
-UFunction* UAdvancedTimelineComponent::GetTimelineLinearColorSignature()
+float UAdvancedTimelineComponent::GetPlaybackPosition(const FString InTrackGuid)
 {
-	auto* TimelineVectorSig = FindObject<UFunction>(FindPackage(nullptr, TEXT("/Script/Engine")), TEXT("OnTimelineLinearColor__DelegateSignature"));
-	check(TimelineVectorSig != NULL)
-	return TimelineVectorSig;
 }
 
-ETimelineSigType UAdvancedTimelineComponent::GetTimelineSignatureForFunction(const UFunction* InFunc)
+bool UAdvancedTimelineComponent::GetIgnoreTimeDilation(const FString InTimelineGuid)
 {
-	if (!InFunc)
-	{
-		if (InFunc->IsSignatureCompatibleWith(GetTimelineEventSignature()))
+}
+
+float UAdvancedTimelineComponent::GetPlayRate(const FString InTrackGuid)
+{
+}
+
+ELengthMode UAdvancedTimelineComponent::GetLengthMode(const FString InTrackGuid)
+{
+}
+
+bool UAdvancedTimelineComponent::GetIsLoop(const FString InTrackGuid)
+{
+}
+
+bool UAdvancedTimelineComponent::GetIsPause(const FString InTimelineGuid)
+{
+}
+
+bool UAdvancedTimelineComponent::GetIsPlaying(const FString InTimelineGuid)
+{
+}
+
+bool UAdvancedTimelineComponent::GetIsStop(const FString InTimelineGuid)
+{
+}
+
+void UAdvancedTimelineComponent::GetAllFloatTracksInfo(const FString InTimelineGuid,
+	TArray<FFloatTrackInfo>& OutFloatTracks)
+{
+}
+
+void UAdvancedTimelineComponent::GetAllEventTracksInfo(const FString InTimelineGuid,
+	TArray<FEventTrackInfo>& OutEventTracks)
+{
+}
+
+void UAdvancedTimelineComponent::GetAllVectorTracksInfo(const FString InTimelineGuid,
+	TArray<FVectorTrackInfo>& OutVectorTracks)
+{
+}
+
+void UAdvancedTimelineComponent::GetAllLinearColorTracksInfo(const FString InTimelineGuid,
+	TArray<FLinearColorTrackInfo>& OutLinearColorTracks)
+{
+}
+
+int UAdvancedTimelineComponent::GetTrackCount(const FString InTimelineGuid)
+{
+}
+
+float UAdvancedTimelineComponent::GetMinKeyframeTime(const FString InTimelineGuid)
+{
+}
+
+float UAdvancedTimelineComponent::GetMaxKeyframeTime(const FString InTimelineGuid)
+{
+}
+
+float UAdvancedTimelineComponent::GetMaxEndTime(const FString InTimelineGuid)
+{
+}
+
+void UAdvancedTimelineComponent::AddUpdateCallback(const FString InTimelineGuid, const FOnTimelineEvent InUpdateEvent)
+{
+}
+
+void UAdvancedTimelineComponent::AddFinishedCallback(const FString InTimelineGuid,
+	const FOnTimelineEvent InFinishedEvent)
+{
+}
+
+void UAdvancedTimelineComponent::AddTimelineInfo(const FTimelineInfo InTimeline,
+	const FTimelineSetting InTimelineSetting)
+{
+}
+
+void UAdvancedTimelineComponent::AddSettingToList(const FTimelineSetting InTimelineSetting)
+{
+}
+
+void UAdvancedTimelineComponent::AddFloatTrack(const FString InTimelineGuid, const FFloatTrackInfo InFloatTrack)
+{
+}
+
+void UAdvancedTimelineComponent::AddEventTrack(const FString InTimelineGuid, const FEventTrackInfo InEventTrack)
+{
+}
+
+void UAdvancedTimelineComponent::AddVectorTrack(const FString InTimelineGuid, const FVectorTrackInfo InVectorTrack)
+{
+}
+
+void UAdvancedTimelineComponent::AddLinearColorTrack(const FString InTimelineGuid,
+	const FLinearColorTrackInfo InLinearColorTrack)
+{
+}
+
+void UAdvancedTimelineComponent::GenericAddTrack(const FString InTimelineGuid, const EAdvTimelineType InTrackType,
+	const UScriptStruct* StructType, const void* InTrack)
+{
+}
+
+void UAdvancedTimelineComponent::SetLength(const FString InTrackGuid, const float InNewTime)
+{
+}
+
+void UAdvancedTimelineComponent::SetIgnoreTimeDilation(const FString InTimelineGuid, const bool IsIgnoreTimeDilation)
+{
+}
+
+void UAdvancedTimelineComponent::SetPlaybackPosition(const FString InTrackGuid, const float InNewTime,
+	const bool bIsFireEvent, const bool bIsFireUpdate, const bool bIsFirePlay)
+{
+}
+
+void UAdvancedTimelineComponent::SetTrackPlayRate(const FString InTrackGuid, const float InNewPlayRate)
+{
+}
+
+void UAdvancedTimelineComponent::SetTrackTimeMode(const FString InTrackGuid, const ELengthMode InEndTimeMode)
+{
+}
+
+void UAdvancedTimelineComponent::SetTimelineLoop(const FString InTimelineGuid, const bool bIsLoop)
+{
+}
+
+void UAdvancedTimelineComponent::SetTrackLoop(const FString InTrackGuid, const bool bIsLoop)
+{
+}
+
+void UAdvancedTimelineComponent::SetTimelineAutoPlay(const FString InTimelineGuid, const bool bIsAutoPlay)
+{
+}
+
+void UAdvancedTimelineComponent::SetTrackAutoPlay(const FString InTrackGuid, const bool bIsAutoPlay)
+{
+}
+
+void UAdvancedTimelineComponent::SetTimelinePlayRate(const FString InTimelineGuid, const float InNewPlayRate)
+{
+}
+
+void UAdvancedTimelineComponent::ChangeTrackCurve(const FString InTrackGuid, const UCurveBase* InCurve)
+{
+}
+
+void UAdvancedTimelineComponent::ChangeTimelineName(const FString InTimelineGuid, const FText InNewName)
+{
+}
+
+void UAdvancedTimelineComponent::ChangeSettingName(const FString InSettingGuid, const FText InNewName)
+{
+}
+
+void UAdvancedTimelineComponent::ChangeTrackName(const FString InTrackGuid, const FString InNewName)
+{
+}
+
+void UAdvancedTimelineComponent::Play(const FString InTimelineGuid, const EPlayMethod PlayMethod)
+{
+}
+
+void UAdvancedTimelineComponent::Stop(const FString InTimelineGuid, const bool bIsPause)
+{
+}
+
+void UAdvancedTimelineComponent::ResetTimeline(const FString InTimelineGuid)
+{
+}
+
+void UAdvancedTimelineComponent::ClearTimelineTracks(const FString InTimelineGuid)
+{
+}
+
+void UAdvancedTimelineComponent::ResetTrack(const FString InTrackGuid)
+{
+}
+
+void UAdvancedTimelineComponent::DelTrack(const FString InTrackGuid)
+{
+}
+
+void UAdvancedTimelineComponent::ApplySettingToTimeline(const FString InSettingsGuid, const FString InTimelineGuid,
+	FString& OutOriginSettingsGuid)
+{
+}
+
+void UAdvancedTimelineComponent::DelTimeline(const FString InTimelineGuid)
+{
+}
+
+void UAdvancedTimelineComponent::ClearTimelines()
+{
+}
+
+void UAdvancedTimelineComponent::ClearSettingList()
+{
+}
+
+void UAdvancedTimelineComponent::TickTimeline(const FString InTimelineGuid, float DeltaTime)
+{
+}
+
+bool UAdvancedTimelineComponent::QueryTimelineByGuid(const FString InTimelineGuid, FTimelineInfo& OutTimelineInfo)
+{
+}
+
+bool UAdvancedTimelineComponent::QuerySettingsByGuid(const FString InSettingsGuid, FTimelineSetting& OutTimelineSetting,
+	FTimelineInfo& OutTimeline)
+{
+}
+
+bool UAdvancedTimelineComponent::QueryTrackByGuid(const FString InTrackGuid, EAdvTimelineType& OutTrackType,
+	FTrackInfoBase*& OutTrack, FTimelineInfo& OutTimeline)
+{
+}
+
+bool UAdvancedTimelineComponent::QueryCurveByGuid(const FString InCurveGuid, EAdvTimelineType& OutCurveType,
+	FCurveInfoBase*& OutCurve, FTimelineInfo& OutTimeline)
+{
+}
+
+bool UAdvancedTimelineComponent::QueryKeyByGuid(const FString InKeyGuid, FString& OutTrackGuid, FKeyInfo*& OutKey,
+	FTimelineInfo& OutTimeline)
+{
+}
+
+bool UAdvancedTimelineComponent::ValidFTimelineInfo(const FTimelineInfo* InTimelineInfo)
+{
+}
+
+bool UAdvancedTimelineComponent::ValidFTimelineSetting(const FTimelineSetting* InSettingsInfo)
+{
+}
+
+bool UAdvancedTimelineComponent::ValidFTrackInfo(const FTrackInfoBase* InTrack)
+{
+}
+
+bool UAdvancedTimelineComponent::ValidFCurveInfo(const FCurveInfoBase* InCurve)
+{
+	if (!InCurve) {
+		#pragma region
+		if (const FFloatCurveInfo* FloatCurve = (FFloatCurveInfo*)(InCurve))
 		{
-			return ETS_EventSignature;
-		}
-		else if (InFunc->IsSignatureCompatibleWith(GetTimelineFloatSignature()))
-		{
-			return ETS_FloatSignature;
-		}
-		else if (InFunc->IsSignatureCompatibleWith(GetTimelineVectorSignature()))
-		{
-			return ETS_VectorSignature;
-		}
-		else if (InFunc->IsSignatureCompatibleWith(GetTimelineLinearColorSignature()))
-		{
-			return ETS_LinearColorSignature;
-		}
-	}
-
-	return ETS_InvalidSignature;
-}
-
-void UAdvancedTimelineComponent::AddEventTrack(FAdvEventTrackInfo InEventTrack,bool& bIsSuccess)
-{
-	AdvEventTracks.Add(InEventTrack);
-}
-
-void UAdvancedTimelineComponent::AddVectorTrack(FAdvVectorTrackInfo InVectorTrack, bool& bIsSuccess)
-{
-	AdvVectorTracks.Add(InVectorTrack);
-}
-
-void UAdvancedTimelineComponent::AddFloatTrack(FAdvFloatTrackInfo InFloatTrack, bool& bIsSuccess)
-{
-	AdvFloatTracks.Add(InFloatTrack);
-}
-
-void UAdvancedTimelineComponent::AddLinearColorTrack(FAdvLinearColorTrackInfo InLinearColorTrack, bool& bIsSuccess)
-{
-	AdvLinearColorTracks.Add(InLinearColorTrack);
-}
-
-void UAdvancedTimelineComponent::SetUpdateEvent(FOnTimelineEvent NewTimelinePostUpdateFunc)
-{
-	TimelineUpdateFunc = NewTimelinePostUpdateFunc;
-}
-
-void UAdvancedTimelineComponent::SetFinishedEvent(const FOnTimelineEvent& NewTimelineFinishedFunc)
-{
-	TimelineFinishFunc = NewTimelineFinishedFunc;
-}
-
-void UAdvancedTimelineComponent::TickAdvTimeline(float DeltaTime)
-{
-	bool bIsFinished = false;
-
-	if (bPlaying)
-	{
-		const float TimelineLength = GetTimelineLength();
-		const float EffectiveDeltaTime = DeltaTime * (bReversePlayback ? (-PlayRate) : (PlayRate));
-
-		float NewPosition = Position + EffectiveDeltaTime;
-
-		if (EffectiveDeltaTime > 0.0f)
-		{
-			if (NewPosition > TimelineLength)
+			if (!FloatCurve->Guid.IsEmpty() && IsValid(FloatCurve->CurveObj))
 			{
-				// If looping, play to end, jump to start, and set target to somewhere near the beginning.
-				if (bLooping)
+				if (FloatCurve->CurveKeyInfo.Num() > 0)
 				{
-					SetPlaybackPosition(TimelineLength, true);
-					SetPlaybackPosition(0.f, false);
-
-					if (TimelineLength > 0.f)
+					for (FKeyInfo ThisKey : FloatCurve->CurveKeyInfo)
 					{
-						while (NewPosition > TimelineLength)
-						{
-							NewPosition -= TimelineLength;
-						}
-					}
-					else
-					{
-						NewPosition = 0.f;
+						if (!ValidFKeyInfo(&ThisKey)) return false;
 					}
 				}
-				// If not looping, snap to end and stop playing.
-				else
-				{
-					NewPosition = TimelineLength;
-					Pause();
-					bIsFinished = true;
-				}
+				return true;
 			}
 		}
-		else
-		{
-			if (NewPosition < 0.f)
-			{
-				// If looping, play to start, jump to end, and set target to somewhere near the end.
-				if (bLooping)
-				{
-					SetPlaybackPosition(0.f, true);
-					SetPlaybackPosition(TimelineLength, false);
+		#pragma endregion FloatCurve
 
-					if (TimelineLength > 0.f)
-					{
-						while (NewPosition < 0.f)
-						{
-							NewPosition += TimelineLength;
-						}
-					}
-					else
-					{
-						NewPosition = 0.f;
-					}
-				}
-				// If not looping, snap to start and stop playing.
-				else
+		#pragma region
+		if (const FEventCurveInfo* EventCurve = (FEventCurveInfo*)(InCurve))
+		{
+			if (!EventCurve->Guid.IsEmpty() && IsValid(EventCurve->CurveObj))
+			{
+				if (EventCurve->CurveKeyInfo.Num() > 0)
 				{
-					NewPosition = 0.f;
-					Reset();
-					bIsFinished = true;
+					for (FKeyInfo ThisKey : EventCurve->CurveKeyInfo)
+					{
+						if (!ValidFKeyInfo(&ThisKey)) return false;
+					}
 				}
+				return true;
 			}
 		}
+		#pragma endregion EventCurve
 
-		SetPlaybackPosition(NewPosition, true);
+		#pragma region
+		if (const FVectorCurveInfo* VectorCurve = (FVectorCurveInfo*)(InCurve))
+		{
+			if (!VectorCurve->Guid.IsEmpty() && IsValid(VectorCurve->CurveObj))
+			{
+				if (VectorCurve->CurveKeyInfo.Num() > 0)
+				{
+					for (FKeyInfo ThisKey : VectorCurve->CurveKeyInfo)
+					{
+						if (!ValidFKeyInfo(&ThisKey)) return false;
+					}
+				}
+				return true;
+			}
+		}
+		#pragma endregion VectorCurve
+
+		#pragma region
+		if (const FLinearColorCurveInfo*  LinearColorCurve = (FLinearColorCurveInfo*)(InCurve))
+		{
+			if (!LinearColorCurve->Guid.IsEmpty() && IsValid(LinearColorCurve->CurveObj))
+			{
+				if (LinearColorCurve->CurveKeyInfo.Num() > 0)
+				{
+					for (FKeyInfo ThisKey : LinearColorCurve->CurveKeyInfo)
+					{
+						if (!ValidFKeyInfo(&ThisKey)) return false;
+					}
+				}
+				return true;
+			}
+		}
+		#pragma endregion LinearColorCurve
 	}
-
-	// Notify user that timeline finished
-	if (bIsFinished)
-		TimelineFinishFunc.ExecuteIfBound();
+	return false;
 }
 
-void UAdvancedTimelineComponent::GetAllTrackData(TArray<UCurveBase*>& OutCurves,TArray<FName>& OutTrackName,TArray<FName>& OutFuncName) const
+// Finished TODO:Wait Valid
+bool UAdvancedTimelineComponent::ValidFKeyInfo(FKeyInfo* InKey)
 {
-	for (const FAdvEventTrackInfo& ThisTrack : AdvEventTracks)
-	{
-		OutCurves.Add(ThisTrack.EventCurve);
-		OutFuncName.Add(ThisTrack.OnEventFunc.GetFunctionName());
-		OutTrackName.Add(ThisTrack.TrackName);
-	}
+	/** 关键帧的值基本都是会默认赋值的，故不需要检查。 */
+	if (InKey && !InKey->Guid.IsEmpty()) return true;
 
-	for (const FAdvFloatTrackInfo& ThisTrack : AdvFloatTracks)
-	{
-		OutCurves.Add(ThisTrack.FloatCurve);
-		OutFuncName.Add(ThisTrack.OnEventFunc.GetFunctionName());
-		OutTrackName.Add(ThisTrack.TrackName);
-	}
-
-	for (const FAdvVectorTrackInfo& ThisTrack : AdvVectorTracks)
-	{
-		OutCurves.Add(ThisTrack.VectorCurve);
-		OutFuncName.Add(ThisTrack.OnEventFunc.GetFunctionName());
-		OutTrackName.Add(ThisTrack.TrackName);
-	}
-
-	for (const FAdvLinearColorTrackInfo& ThisTrack : AdvLinearColorTracks)
-	{
-		OutCurves.Add(ThisTrack.LinearColorCurve);
-		OutFuncName.Add(ThisTrack.OnEventFunc.GetFunctionName());
-		OutTrackName.Add(ThisTrack.TrackName);
-	}
+	PrintError("KeyValidError", "Make sure that the GUID of the keyframe and itself have contents!");
+	return false;
+	
 }
 
-float UAdvancedTimelineComponent::GetTrackLastKeyframeTime() const
+// Finished TODO:Wait Valid
+void UAdvancedTimelineComponent::GenerateDefaultTimeline(FTimelineInfo& OutTimeline,
+	FTimelineSetting& OutTimelineSetting)
 {
+	FTimelineInfo DefaultTimeline;
+	FTimelineSetting DefaultSetting;
 
-	float MaxTime = 0.f;
+	DefaultSetting.Guid = UKismetGuidLibrary::NewGuid().ToString();
+	DefaultSetting.PlayRate = 1.0f;
+	DefaultSetting.bIgnoreTimeDilation = false;
+	DefaultSetting.bIsLoop = false;
+	DefaultSetting.PlayMethod = EPlayMethod::Play;
+	DefaultSetting.LengthMode = ELengthMode::Keyframe;
+	DefaultTimeline.Guid = UKismetGuidLibrary::NewGuid().ToString();
+	DefaultTimeline.TimelineSetting = DefaultSetting;
 
-	// Check the various tracks for the max time specified
-	for (const FAdvEventTrackInfo& CurrentEvent : AdvEventTracks)
-	{
-		float MinVal, MaxVal;
-		CurrentEvent.EventCurve->GetTimeRange(MinVal, MaxVal);
-		MaxTime = FMath::Max(MaxVal, MaxTime);
-	}
+	DefaultTimeline.TimelineName = LOCTEXT("DefaultTimeline", "DefaultTimeline");
+	DefaultSetting.SettingName = LOCTEXT("DefaultSetting", "DefaultSetting");
 
-	for (const FAdvVectorTrackInfo& CurrentTrack : AdvVectorTracks)
-	{
-		float MinVal, MaxVal;
-		CurrentTrack.VectorCurve->GetTimeRange(MinVal, MaxVal);
-		MaxTime = FMath::Max(MaxVal, MaxTime);
-	}
+	OutTimeline = DefaultTimeline;
+	OutTimelineSetting = DefaultSetting;
 
-	for (const FAdvFloatTrackInfo& CurrentTrack : AdvFloatTracks)
-	{
-		float MinVal, MaxVal;
-		CurrentTrack.FloatCurve->GetTimeRange(MinVal, MaxVal);
-		MaxTime = FMath::Max(MaxVal, MaxTime);
-	}
-
-	for (const FAdvLinearColorTrackInfo& CurrentTrack : AdvLinearColorTracks)
-	{
-		float MinVal, MaxVal;
-		CurrentTrack.LinearColorCurve->GetTimeRange(MinVal, MaxVal);
-		MaxTime = FMath::Max(MaxVal, MaxTime);
-	}
-
-	return MaxTime;
 }
 
-float UAdvancedTimelineComponent::GetCurveLastKeyframeTime(ETrackType InTrackType, UCurveBase* InCurve) const
+// Finished TODO:Wait Valid
+void UAdvancedTimelineComponent::PrintError(const FString InKey, const FString InText)
 {
-
-	float MaxTime = 0.f;
-
-	// 思路错了，等待重写
-	//switch (InTrackType)
-	//{
-	//	case ETrackType::EventTrack:
-	//		if (UCurveFloat* CurrentCurve = Cast<UCurveFloat>(InCurve))
-	//		{
-	//			float MinVal, MaxVal;
-	//			CurrentCurve->GetTimeRange(MinVal, MaxVal);
-	//			MaxTime = FMath::Max(MaxVal, MaxTime);
-	//		}
-	//		break;
-	//	case ETrackType::FloatTrack:
-	//		if (UCurveFloat* CurrentCurve = Cast<UCurveFloat>(InCurve))
-	//		{
-	//			float MinVal, MaxVal;
-	//			CurrentCurve->GetTimeRange(MinVal, MaxVal);
-	//			MaxTime = FMath::Max(MaxVal, MaxTime);
-	//		}
-	//		break;
-	//	case ETrackType::LinearColorTrack:
-	//		if (UCurveLinearColor* CurrentCurve = Cast<UCurveLinearColor>(InCurve))
-	//		{
-	//			float MinVal, MaxVal;
-	//			CurrentCurve->GetTimeRange(MinVal, MaxVal);
-	//			MaxTime = FMath::Max(MaxVal, MaxTime);
-	//		}
-	//		break;
-	//	case ETrackType::VectorTrack:
-	//		if (UCurveVector* CurrentCurve = Cast<UCurveVector>(InCurve))
-	//		{
-	//			float MinVal, MaxVal;
-	//			CurrentCurve->GetTimeRange(MinVal, MaxVal);
-	//			MaxTime = FMath::Max(MaxVal, MaxTime);
-	//		}
-	//		break;
-	//	default:
-	//		break;
-	//}
-	return MaxTime;
+	const FString ErrorInfo = FInternationalization::ForUseOnlyByLocMacroAndGraphNodeTextLiterals_CreateText(*InText, TEXT(LOCTEXT_NAMESPACE), *InKey).ToString();
+	UE_LOG(LogAdvTimeline, Error, TEXT("%s"), *ErrorInfo)
 }
 
+#undef LOCTEXT_NAMESPACE
