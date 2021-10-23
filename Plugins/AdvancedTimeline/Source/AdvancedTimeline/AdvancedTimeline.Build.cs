@@ -38,6 +38,7 @@ public class AdvancedTimeline : ModuleRules
 			{
 				"CoreUObject",
 				"Engine",
+                "UnrealEd",
 				"Slate",
 				"SlateCore",
                 "ApplicationCore",

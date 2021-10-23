@@ -159,7 +159,7 @@ public:
 	/** GUID */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FString Guid;
-
+	
 	/** 曲线的类型 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		EAdvTimelineType CurveType;
@@ -176,11 +176,15 @@ struct FEventKey
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FString Guid;
 
-	/** Time at which event should fire */
+	/** 当前关键帧触发的时间点 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		float Time;
 
-	/** Function to execute when Time is reached */
+	/** 保存一下关键帧的信息，方便后续查找。 */
+	UPROPERTY()
+		FRichCurveKey BaseKey;
+
+	/** 当前关键帧执行的函数 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FOnTimelineEvent EventFunc;
 
@@ -294,23 +298,17 @@ public:
 
 	/** GUID */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FString Guid;
-
-	/** 轨道名称 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FString TrackName;
+		FString GuName;
 
 	FTrackInfoBase()
-		: Guid(UKismetGuidLibrary::NewGuid().ToString())
-		, TrackName(LOCTEXT("DefaultTrackName","DefaultTrack").ToString())
+		: GuName(UKismetGuidLibrary::NewGuid().ToString())
 	{ }
 
 	/** 如果GUID都相同了，那就认为是一样的。所以不要给相同的GUID，其他东西不管 */
 	friend inline bool operator==(const FTrackInfoBase& A, const FTrackInfoBase& B)
 	{
 		return
-			A.Guid == B.Guid &&
-			A.TrackName == B.TrackName;
+			A.GuName == B.GuName;
 	}
 };
 
@@ -378,6 +376,22 @@ public:
 		FLinearColorCurveInfo CurveInfo;
 };
 
+/** LinearColor轨道信息 */
+USTRUCT(BlueprintType)
+struct FEventFunc
+{
+public:
+	GENERATED_USTRUCT_BODY()
+
+	/** Update事件函数，每帧都会执行 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FOnTimelineEvent OnUpdateEventFunc;
+
+	/** Update事件函数，每帧都会执行 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FOnTimelineEvent OnFinishedEventFunc;
+};
+
 /** 时间线设置 */
 USTRUCT(BlueprintType)
 struct FTimelineSetting
@@ -387,23 +401,15 @@ public:
 
 	/** GUID */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FString Guid;
-
-	/** 配置的名称 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FText SettingName;
+		FString GuName;
 
 	/** 是否忽略全局的时间膨胀(没用过，不清楚) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		bool bIgnoreTimeDilation;
 
-	/** Update事件函数，每帧都会执行 */
+	/** 播放方法 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineEvent OnUpdateEventFunc;
-
-	/** Update事件函数，每帧都会执行 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineEvent OnFinishedEventFunc;
+		FEventFunc EventFunc;
 
 	/** 播放方法 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -417,21 +423,24 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		float PlayRate;
 
+	/** 时间线长度，一般来说就是轨道长度 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		float Length;
+
 	/** 是否以关键帧作为时间线的长度 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		ETimeMode LengthMode;
+		ELengthMode LengthMode;
 
 	/** 如果GUID都相同了，那就认为是一样的。所以不要给相同的GUID，其他东西不管 */
 	friend inline bool operator==(const FTimelineSetting& A, const FTimelineSetting& B)
 	{
 		return
-			A.Guid == B.Guid &&
+			A.GuName == B.GuName &&
 			A.PlayRate == B.PlayRate &&
 			A.bIgnoreTimeDilation == B.bIgnoreTimeDilation &&
 			A.bIsLoop == B.bIsLoop &&
-			A.OnUpdateEventFunc == B.OnUpdateEventFunc &&
-			A.OnFinishedEventFunc == B.OnFinishedEventFunc &&
-			A.SettingName.ToString() == B.SettingName.ToString();
+			A.EventFunc.OnUpdateEventFunc == B.EventFunc.OnUpdateEventFunc &&
+			A.EventFunc.OnFinishedEventFunc == B.EventFunc.OnFinishedEventFunc;
 	}
 
 	/** Hash校验。强调一下，不要给相同的GUID，其他东西不管 */
@@ -439,11 +448,10 @@ public:
 	{
 		uint32 Hash = 0;
 
-		Hash = HashCombine(Hash, GetTypeHash(Key.Guid));
-		Hash = HashCombine(Hash, GetTypeHash(Key.SettingName.ToString()));
+		Hash = HashCombine(Hash, GetTypeHash(Key.GuName));
 		Hash = HashCombine(Hash, GetTypeHash(Key.LengthMode));
-		Hash = HashCombine(Hash, GetTypeHash(Key.OnFinishedEventFunc));
-		Hash = HashCombine(Hash, GetTypeHash(Key.OnUpdateEventFunc));
+		Hash = HashCombine(Hash, GetTypeHash(Key.EventFunc.OnFinishedEventFunc));
+		Hash = HashCombine(Hash, GetTypeHash(Key.EventFunc.OnUpdateEventFunc));
 		Hash = HashCombine(Hash, GetTypeHash(Key.PlayMethod));
 		Hash = HashCombine(Hash, GetTypeHash(Key.PlayRate));
 		Hash = HashCombine(Hash, GetTypeHash(Key.bIgnoreTimeDilation));
@@ -462,39 +470,54 @@ public:
 
 	/** GUID */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FString Guid;
+		FString GuName;
 
 	/** 对应的时间线设置，可以切换来快速使用不同的设置(虽然在蓝图里保存再设置貌似也可以) */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FTimelineSetting TimelineSetting;
-
-	/** 时间线的名称 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FText TimelineName;
+		FString SettingGuName;
 
 	/** 保存时间线可能存在的所有Float轨道 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		TArray<FFloatTrackInfo> FloatTracks;
+		TMap<FString, FFloatTrackInfo> FloatTracks;
 
 	/** 保存时间线可能存在的所有事件轨道 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		TArray<FEventTrackInfo> EventTracks;
+		TMap<FString, FEventTrackInfo> EventTracks;
 
 	/** 保存时间线可能存在的所有Vector轨道 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		TArray<FVectorTrackInfo> VectorTracks;
+		TMap<FString, FVectorTrackInfo> VectorTracks;
 
 	/** 保存时间线可能存在的所有LinearColor轨道 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		TArray<FLinearColorTrackInfo> LinearColorTracks;
+		TMap<FString, FLinearColorTrackInfo> LinearColorTracks;
+
+	#pragma region
+	/** 记录播放状态 */
+	UPROPERTY()
+		EPlayStatus PlayStatus;
+
+	/** 记录当前位置 */
+	UPROPERTY()
+		float Position;
+
+	/** 记录是否正在播放 */
+	UPROPERTY()
+		bool IsPlaying;
+
+	/** 记录是否停止了播放(暂停也是停止) */
+	UPROPERTY()
+		bool IsStop;
+	UPROPERTY()
+		bool bReversePlayback;
+	#pragma endregion 保存当前时间线状态的变量
 
 	/** 如果GUID都相同了，那就认为是一样的。所以不要给相同的GUID，其他东西不管 */
 	friend inline bool operator==(const FTimelineInfo& A,const FTimelineInfo& B)
 	{
 		return
-			A.Guid == B.Guid &&
-			A.TimelineSetting == B.TimelineSetting &&
-			A.TimelineName.ToString() == B.TimelineName.ToString();
+			A.GuName == B.GuName &&
+			A.SettingGuName == B.SettingGuName;
 	}
 
 	/** Hash校验。强调一下，不要给相同的GUID，其他东西不管 */
@@ -502,9 +525,8 @@ public:
 	{
 		uint32 Hash = 0;
 
-		Hash = HashCombine(Hash, GetTypeHash(Key.Guid));
-		Hash = HashCombine(Hash, GetTypeHash(Key.TimelineSetting));
-		Hash = HashCombine(Hash, GetTypeHash(Key.TimelineName.ToString()));
+		Hash = HashCombine(Hash, GetTypeHash(Key.GuName));
+		Hash = HashCombine(Hash, GetTypeHash(Key.SettingGuName));
 		
 		return Hash;
 	}
