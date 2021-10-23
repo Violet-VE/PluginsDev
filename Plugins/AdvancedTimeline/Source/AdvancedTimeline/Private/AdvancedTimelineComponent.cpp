@@ -27,21 +27,21 @@ UAdvancedTimelineComponent::UAdvancedTimelineComponent(const FObjectInitializer&
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 }
 
-// Finished TODO:Wait Valid
+// Finished
 void UAdvancedTimelineComponent::Activate(bool bReset)
 {
 	Super::Activate(bReset);
 	PrimaryComponentTick.SetTickFunctionEnable(true);
 }
 
-// Finished TODO:Wait Valid
+// Finished
 void UAdvancedTimelineComponent::Deactivate()
 {
 	Super::Deactivate();
 	PrimaryComponentTick.SetTickFunctionEnable(false);
 }
 
-// Finished TODO:Wait Valid
+// Finished
 bool UAdvancedTimelineComponent::IsReadyForOwnerToAutoDestroy() const
 {
 	return !PrimaryComponentTick.IsTickFunctionEnabled();
@@ -60,8 +60,7 @@ void UAdvancedTimelineComponent::TickComponent(float DeltaTime, ELevelTick Tick,
 		{
 			if (!ValidFTimelineInfo(&ThisTimeline.Value)) continue;
 			FTimelineSetting* ThisSetting;
-			QuerySetting(ThisTimeline.Value.SettingGuName, ThisSetting);
-			if (!ValidFTimelineSetting(ThisSetting)) continue;
+			if (!QuerySetting(ThisTimeline.Value.SettingGuName, ThisSetting) && !ValidFTimelineSetting(ThisSetting)) continue;
 			if (ThisSetting->bIgnoreTimeDilation)
 			{
 				AActor* const OwnerActor = GetOwner();
@@ -191,37 +190,7 @@ void UAdvancedTimelineComponent::TickTimeline(const FString InTimelineGuName, fl
 				ThisSetting->EventFunc.OnFinishedEventFunc.ExecuteIfBound();
 		}
 	}
-}
-
-bool UAdvancedTimelineComponent::QueryTimeline(const FString InTimelineGuName,
-	FTimelineInfo*& OutTimelineInfo)
-{
-	if (!InTimelineGuName.IsEmpty() && (Timelines.Num() > 0))
-	{
-		if (FTimelineInfo* ThisTimeline = Timelines.Find(InTimelineGuName))
-		{
-			OutTimelineInfo = ThisTimeline;
-			return true;
-		}
-	}
-	PrintError(LOCTEXT("GetTimelineError",
-		"Please confirm the number of Timeline and that there must be one and only one Guid and Name."));
-	return false;
-}
-
-bool UAdvancedTimelineComponent::QuerySetting(const FString InSettingsGuName, FTimelineSetting* & OutSetting)
-{
-	if (!InSettingsGuName.IsEmpty() && (SettingList.Num() > 0))
-	{
-		if (FTimelineSetting* ThisSetting = SettingList.Find(InSettingsGuName))
-		{
-			OutSetting = ThisSetting;
-			return true;
-		}
-	}
-	PrintError(LOCTEXT("GetSettingError",
-		"Please confirm the number of SettingList and that there must be one and only one Guid and Name."));
-	return false;
+	PrintError(LOCTEXT("TickTimelineError","Tick timeline with errors! Please check if the required parameters are filled in the timeline!"));
 }
 
 // Finished TODO:Wait Valid
@@ -251,6 +220,8 @@ void UAdvancedTimelineComponent::Play(const FString InTimelineGuName, const EPla
 			}
 			ThisTimeline->IsPlaying = true;
 		}
+		PrintError("Play");
+		return;
 	}
 	PrintError(LOCTEXT("PlayError",
 		"There is an error in the timeline that needs to be played, please check if the required parameters are filled in!"));
@@ -278,6 +249,7 @@ void UAdvancedTimelineComponent::Stop(const FString InTimelineGuName, const bool
 			ThisTimeline->IsPlaying = false;
 		}
 		PrintError("Stop");
+		return;
 	}
 	PrintError("Stop");
 }
@@ -297,7 +269,6 @@ float UAdvancedTimelineComponent::GetPlaybackPosition(const FString InTimelineGu
 	{
 		return ThisTimeline->Position;
 	}
-
 	PrintError("GetPlaybackPosition");
 	return 0;
 }
@@ -319,8 +290,9 @@ bool UAdvancedTimelineComponent::GetIgnoreTimeDilation(const FString InTimelineG
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			return ThisSetting->bIgnoreTimeDilation;
 		}
+		PrintError("GetIgnoreTimeDilation");
+		return false;
 	}
-
 	PrintError("GetIgnoreTimeDilation");
 	return false;
 }
@@ -342,8 +314,9 @@ float UAdvancedTimelineComponent::GetPlayRate(const FString InTimelineGuName)
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			return ThisSetting->PlayRate;
 		}
+		PrintError("GetPlayRate");
+		return false;
 	}
-
 	PrintError("GetPlayRate");
 	return false;
 }
@@ -365,8 +338,9 @@ ELengthMode UAdvancedTimelineComponent::GetLengthMode(const FString InTimelineGu
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			return ThisSetting->LengthMode;
 		}
+		PrintError("GetLengthMode");
+		return ELengthMode::Keyframe;
 	}
-
 	PrintError("GetLengthMode");
 	return ELengthMode::Keyframe;
 }
@@ -484,7 +458,9 @@ void UAdvancedTimelineComponent::GetAllFloatTracksInfo(const FString InTimelineG
 			return;
 		}
 		PrintError(LOCTEXT("GetAllFloatTracksInfoError", "Number of FloatTracks is 0"));
+		return;
 	}
+	PrintError("GetAllFloatTracksInfo");
 }
 
 // Finished TODO:Wait Valid
@@ -513,8 +489,9 @@ void UAdvancedTimelineComponent::GetAllEventTracksInfo(const FString InTimelineG
 			return;
 		}
 		PrintError(LOCTEXT("GetAllEventTracksInfoError", "Number of EventTracks is 0"));
-
+		return;
 	}
+	PrintError("GetAllEventTracksInfo");
 }
 
 // Finished TODO:Wait Valid
@@ -543,7 +520,9 @@ void UAdvancedTimelineComponent::GetAllVectorTracksInfo(const FString InTimeline
 			return;
 		}
 		PrintError(LOCTEXT("GetAllVectorTracksInfoError", "Number of VectorTracks is 0"));
+		return;
 	}
+	PrintError("GetAllVectorTracksInfo");
 }
 
 // Finished TODO:Wait Valid
@@ -572,8 +551,9 @@ void UAdvancedTimelineComponent::GetAllLinearColorTracksInfo(const FString InTim
 			return;
 		}
 		PrintError(LOCTEXT("GetAllLinearColorTracksInfoError", "Number of LinearColorTracks is 0"));
-
+		return;
 	}
+	PrintError("GetAllLinearColorTracksInfo");
 }
 
 // Finished TODO:Wait Valid
@@ -601,7 +581,7 @@ int UAdvancedTimelineComponent::GetTrackCount(const FString InTimelineGuName)
 // Finished TODO:Wait Valid
 float UAdvancedTimelineComponent::GetMinKeyframeTime(const FString InTimelineGuName)
 {
-	float MinKeyTime = 999999.0f;
+	float MinKeyTime = 9999999.0f;
 
 	if (InTimelineGuName.IsEmpty())
 	{
@@ -824,6 +804,7 @@ float UAdvancedTimelineComponent::GetTimelineLength(const FString InTimelineGuNa
 			return ThisSetting->Length;
 		}
 		PrintError("GetTimelineLength");
+		return 0.0f;
 	}
 	PrintError("GetTimelineLength");
 	return 0.0f;
@@ -845,6 +826,7 @@ void UAdvancedTimelineComponent::AddUpdateCallback(const FString InTimelineGuNam
 			ThisSetting->EventFunc.OnUpdateEventFunc = InUpdateEvent;
 		}
 		PrintError("AddUpdateCallback");
+		return;
 	}
 	PrintError("AddUpdateCallback");
 }
@@ -865,6 +847,7 @@ void UAdvancedTimelineComponent::AddFinishedCallback(const FString InTimelineGuN
 			ThisSetting->EventFunc.OnFinishedEventFunc = InFinishedEvent;
 		}
 		PrintError("AddFinishedCallback");
+		return;
 	}
 	PrintError("AddFinishedCallback");
 }
@@ -1082,6 +1065,7 @@ void UAdvancedTimelineComponent::SetLength(const FString InTimelineGuName, const
 			ThisSetting->Length = InNewTime;
 		}
 		PrintError("SetLength");
+		return;
 	}
 	PrintError("SetLength");
 }
@@ -1102,6 +1086,7 @@ void UAdvancedTimelineComponent::SetIgnoreTimeDilation(const FString InTimelineG
 			ThisSetting->bIgnoreTimeDilation = IsIgnoreTimeDilation;
 		}
 		PrintError("SetIgnoreTimeDilation");
+		return;
 	}
 	PrintError("SetIgnoreTimeDilation");
 }
@@ -1228,6 +1213,10 @@ void UAdvancedTimelineComponent::SetPlaybackPosition(
 				}
 			}
 		}
+		if (bIsFirePlay)
+		{
+			Play(ThisTimeline->GuName,EPlayMethod::Play);
+		}
 		if (bIsFireUpdate)
 		{
 			FTimelineSetting* ThisSetting;
@@ -1235,11 +1224,9 @@ void UAdvancedTimelineComponent::SetPlaybackPosition(
 			if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 				ThisSetting->EventFunc.OnUpdateEventFunc.ExecuteIfBound();
 			}
+			// 因为后面没有其他逻辑了，所以直接Return就行，不然会输出两遍Error
 			PrintError("SetPlaybackPosition");
-		}
-		if (bIsFirePlay)
-		{
-			Play(ThisTimeline->GuName,EPlayMethod::Play);
+			return;
 		}
 	}
 	PrintError("SetPlaybackPosition");
@@ -1261,6 +1248,7 @@ void UAdvancedTimelineComponent::SetLengthMode(const FString InTimelineGuName, c
 			ThisSetting->LengthMode = InLengthMode;
 		}
 		PrintError("SetLengthMode");
+		return;
 	}
 	PrintError("SetLengthMode");
 }
@@ -1281,6 +1269,7 @@ void UAdvancedTimelineComponent::SetLoop(const FString InTimelineGuName, const b
 			ThisSetting->bIsLoop = bIsLoop;
 		}
 		PrintError("SetLoop");
+		return;
 	}
 	PrintError("SetLoop");
 }
@@ -1301,6 +1290,7 @@ void UAdvancedTimelineComponent::SetPlayRate(const FString InTimelineGuName, con
 			ThisSetting->PlayRate = InNewPlayRate;
 		}
 		PrintError("SetPlayRate");
+		return;
 	}
 	PrintError("SetPlayRate");
 }
@@ -1657,8 +1647,8 @@ void UAdvancedTimelineComponent::ApplySettingToTimeline(
 				return;
 			}
 			PrintError("ApplySettingToTimeline");
+			return;
 		}
-		PrintError("ApplySettingToTimeline");
 	}
 	PrintError("ApplySettingToTimeline");
 }
@@ -1675,6 +1665,7 @@ void UAdvancedTimelineComponent::DelTimeline(const FString InTimelineGuName)
 			return;
 		}
 		PrintError("DelTimeline");
+		return;
 	}
 	PrintError(LOCTEXT("DelTimelineError","There is only one timeline left! Or the input parameter is empty!"));
 }
@@ -1732,6 +1723,38 @@ bool UAdvancedTimelineComponent::GetSetting(const FString InSettingsGuName, FTim
 		}
 	}
 	PrintError(LOCTEXT("GetSettingError", 
+		"Please confirm the number of SettingList and that there must be one and only one Guid and Name."));
+	return false;
+}
+
+// Finished 
+bool UAdvancedTimelineComponent::QueryTimeline(const FString InTimelineGuName, FTimelineInfo*& OutTimelineInfo)
+{
+	if (!InTimelineGuName.IsEmpty() && (Timelines.Num() > 0))
+	{
+		if (FTimelineInfo* ThisTimeline = Timelines.Find(InTimelineGuName))
+		{
+			OutTimelineInfo = ThisTimeline;
+			return true;
+		}
+	}
+	PrintError(LOCTEXT("GetTimelineError",
+		"Please confirm the number of Timeline and that there must be one and only one Guid and Name."));
+	return false;
+}
+
+// Finished 
+bool UAdvancedTimelineComponent::QuerySetting(const FString InSettingsGuName, FTimelineSetting* & OutSetting)
+{
+	if (!InSettingsGuName.IsEmpty() && (SettingList.Num() > 0))
+	{
+		if (FTimelineSetting* ThisSetting = SettingList.Find(InSettingsGuName))
+		{
+			OutSetting = ThisSetting;
+			return true;
+		}
+	}
+	PrintError(LOCTEXT("GetSettingError",
 		"Please confirm the number of SettingList and that there must be one and only one Guid and Name."));
 	return false;
 }
@@ -2325,28 +2348,28 @@ void UAdvancedTimelineComponent::GenerateDefaultTimeline(FTimelineInfo & OutTime
 	OutSetting = DefaultSetting;
 }
 
-// Finished TODO:Wait Valid
+// Finished
 void UAdvancedTimelineComponent::PrintError()
 {
 	const FString ErrorInfo = FInternationalization::ForUseOnlyByLocMacroAndGraphNodeTextLiterals_CreateText(TEXT("There is an error here, please check him!"), TEXT(LOCTEXT_NAMESPACE), TEXT("GenericError")).ToString();
 	UE_LOG(LogAdvTimeline, Error, TEXT("%s"), *ErrorInfo)
 }
 
-// Finished TODO:Wait Valid
+// Finished
 void UAdvancedTimelineComponent::PrintError(const FString InFuncName)
 {
 	const FString ErrorInfo = LOCTEXT("FuncError", "function has an error!").ToString();
 	UE_LOG(LogAdvTimeline, Error, TEXT("%s %s"), *InFuncName,*ErrorInfo)
 }
 
-// Finished TODO:Wait Valid
+// Finished
 void UAdvancedTimelineComponent::PrintError(const FText InErrorInfo)
 {
 	const FString ErrorInfo = InErrorInfo.ToString();
 	UE_LOG(LogAdvTimeline, Error, TEXT("%s"), *ErrorInfo)
 }
 
-// Finished TODO:Wait Valid
+// Finished
 void UAdvancedTimelineComponent::PrintEmptyError()
 {
 	//GWorld->GetBlueprintObjectsBeingDebugged()
