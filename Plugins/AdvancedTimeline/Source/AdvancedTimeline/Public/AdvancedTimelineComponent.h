@@ -26,7 +26,6 @@ DEFINE_LOG_CATEGORY_STATIC(LogAdvTimeline, Log, All);
  *	只需要使用NSLOCTEXT()或者LOCTEXT()就可以了，剩下的操作需要进编辑器打开本地化Dash面板再改
  */
 
-
 UCLASS(BlueprintType,meta=(BlueprintSpawnableComponent))
 class ADVANCEDTIMELINE_API UAdvancedTimelineComponent : public UActorComponent
 {
@@ -42,6 +41,18 @@ public:
 		TMap<FString, FTimelineInfo> Timelines;
 	UPROPERTY(BlueprintReadOnly)
 		TMap<FString, FTimelineSetting> SettingList;
+	UPROPERTY(BlueprintAssignable)
+		FOnAdvancedTimelineEvent AdvTimelineEventDelegate;
+	UPROPERTY(BlueprintAssignable)
+		FOnAdvancedTimelineEvent AdvTimelineUpdateDelegate;
+	UPROPERTY(BlueprintAssignable)
+		FOnAdvancedTimelineEvent AdvTimelineFinishedDelegate;
+	UPROPERTY(BlueprintAssignable)
+		FOnAdvancedTimelineEventFloat AdvTimelineFloatDelegate;
+	UPROPERTY(BlueprintAssignable)
+		FOnAdvancedTimelineEventVector AdvTimelineVectorDelegate;
+	UPROPERTY(BlueprintAssignable)
+		FOnAdvancedTimelineEventLinearColor AdvTimelineLinearColorDelegate;
 	#pragma endregion 变量
 
 
@@ -110,16 +121,19 @@ public:
 	/** 获取时间线中最大关键帧时间 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
 		float GetTimelineLength(const FString InTimelineGuName);
+	/** 获取时间线中最大关键帧时间 */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Get")
+		EPlayStatus GetPlayStatus(const FString InTimelineGuName);
 	#pragma endregion Get
 
 
 	#pragma region
 	/** 添加全局的每帧执行的事件函数，反复添加会覆盖，决定好再加 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
-		void AddUpdateCallback(const FString InTimelineGuName, const FOnTimelineEvent InUpdateEvent);
+		void AddUpdateCallback(const FString InTimelineGuName, const FString InUpdateEventGuName);
 	/** 添加结束时执行的函数到轨道，反复添加会覆盖 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
-		void AddFinishedCallback(const FString InTimelineGuName, const FOnTimelineEvent InFinishedEvent);
+		void AddFinishedCallback(const FString InTimelineGuName, const FString InFinishedEventGuName);
 	/** 添加时间线，因为默认有一个(一个项目可以有多条时间线) */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
 		void AddTimelineInfo(const FTimelineInfo InTimeline, const FTimelineSetting InSetting);
@@ -138,9 +152,12 @@ public:
 	/** 添加一个LinearColor轨道 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
 		void AddLinearColorTrack(const FString InTimelineGuName, FLinearColorTrackInfo InLinearColorTrack);
+	/** 生成默认的Timeline */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Add")
+	static void GenerateDefaultTimeline(FTimelineInfo & OutTimeline, FTimelineSetting & OutSetting);
 	/** 添加轨道(通用) */
 	UFUNCTION(BlueprintCallable, CustomThunk, meta = (CustomStructureParam = "InTrack"), Category = "AdvancedTimeline|Add")
-		void AddTrack(const FString InTimelineGuName, const EAdvTimelineType InTrackType, int32& InTrack);
+		void AddTrack(const FString InTimelineGuName, const EAdvTimelineType InTrackType, int32 InTrack);
 		void GenericAddTrack(const FString InTimelineGuName, const EAdvTimelineType InTrackType, const UScriptStruct* StructType, void* InTrack);
 	DECLARE_FUNCTION(execAddTrack)
 	{
@@ -171,7 +188,7 @@ public:
 	 *	@param bIsFirePlay指示更改位置后是否继续播放
 	 **/
 	UFUNCTION(BlueprintCallable, meta = (AdvancedDisplay = 3), Category = "AdvancedTimeline|Set")
-		void SetPlaybackPosition(const FString InTimelineGuName, const float InNewTime, const bool bIsFireEvent, const bool bIsFireUpdate = true, const bool bIsFirePlay = true);
+		void SetPlaybackPosition(const FString InTimelineGuName, const float InNewTime, const bool bIsFireEvent, const bool bIsFireUpdate = true);
 	/** 设置轨道的时间模式 */
 	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Set")
 		void SetLengthMode(const FString InTimelineGuName, const ELengthMode InLengthMode);
@@ -244,8 +261,6 @@ public:
 	static bool ValidFCurveInfo(FCurveInfoBase* InCurve);
 	/** 验证关键帧是否有效 */
 	static bool ValidFKeyInfo(FKeyInfo* InKey);
-	/** 生成默认的Timeline */
-	static void GenerateDefaultTimeline(FTimelineInfo & OutTimeline,FTimelineSetting & OutSetting);
 	/** 本地化的输出错误信息(UE_LOG) */
 	static void PrintError();
 	/** 本地化的输出错误信息(UE_LOG) */
@@ -256,6 +271,9 @@ public:
 	static void PrintEmptyError();
 	#pragma endregion 不需要加入GC的函数
 
+	/** 生成默认的Timeline */
+	UFUNCTION(BlueprintCallable, Category = "AdvancedTimeline|Test")
+		UObject* TestFunc(UObject* InObject);
 };
 
 #undef LOCTEXT_NAMESPACE

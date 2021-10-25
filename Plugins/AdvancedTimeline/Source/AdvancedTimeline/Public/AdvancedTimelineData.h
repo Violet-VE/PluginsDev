@@ -15,6 +15,11 @@
 //本地化
 #define LOCTEXT_NAMESPACE "AdvTimeline"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAdvancedTimelineEvent, FString, InFuncGuName);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAdvancedTimelineEventFloat, FString, InFuncGuName,float, Output);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAdvancedTimelineEventVector, FString, InFuncGuName,FVector,Output);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAdvancedTimelineEventLinearColor, FString, InFuncGuName,FLinearColor,Output);
+
 /** 存放高级时间线的一些相关数据。
  *	单纯的存放数据结构的文件。比如枚举和结构体
  */
@@ -87,7 +92,7 @@ public:
 	GENERATED_USTRUCT_BODY()
 
 	/** GUID */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(BlueprintReadOnly)
 		FString Guid;
 
 	/** 保存一下关键帧的信息，方便后续查找。 */
@@ -103,40 +108,33 @@ public:
 		, Guid(UKismetGuidLibrary::NewGuid().ToString())
 	{ }
 
-	static void ConversionKeyModeToInterpMode(const FRichCurveKey InKey,
-		EInterpCurveMode& OutInterpMode)
+	static EInterpCurveMode ConversionKeyModeToInterpMode(const FRichCurveKey InKey)
 	{
 		if (InKey.InterpMode == RCIM_Constant)
 		{
-			OutInterpMode = CIM_Constant;
+			return CIM_Constant;
 		}
-		else if (InKey.InterpMode == RCIM_Linear)
+		if (InKey.InterpMode == RCIM_Linear)
 		{
-			OutInterpMode = CIM_Linear;
+			return  CIM_Linear;
 		}
-		else if (InKey.InterpMode == RCIM_Cubic)
+		if (InKey.InterpMode == RCIM_Cubic)
 		{
 			if (InKey.TangentMode == RCTM_Break)
 			{
-				OutInterpMode = CIM_CurveBreak;
+				return  CIM_CurveBreak;
 			}
-			else if (InKey.TangentMode == RCTM_Auto)
+			if (InKey.TangentMode == RCTM_Auto)
 			{
-				OutInterpMode = CIM_CurveAuto;
+				return  CIM_CurveAuto;
 			}
-			else if (InKey.TangentMode == RCTM_User)
+			if (InKey.TangentMode == RCTM_User)
 			{
-				OutInterpMode = CIM_CurveUser;
+				return  CIM_CurveUser;
 			}
-			else
-			{
-				OutInterpMode = CIM_Linear;
-			}
+			return  CIM_Linear;
 		}
-		else
-		{
-			OutInterpMode = CIM_Linear;
-		}
+		return  CIM_Linear;
 	}
 };
 
@@ -157,11 +155,11 @@ public:
 	{ }
 
 	/** GUID */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(BlueprintReadOnly)
 		FString Guid;
 	
 	/** 曲线的类型 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(BlueprintReadOnly)
 		EAdvTimelineType CurveType;
 
 	/** 曲线没有结束时间和开始时间 */
@@ -173,7 +171,7 @@ struct FEventKey
 	GENERATED_USTRUCT_BODY()
 
 	/** GUID */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	UPROPERTY(BlueprintReadOnly)
 		FString Guid;
 
 	/** 当前关键帧触发的时间点 */
@@ -186,7 +184,7 @@ struct FEventKey
 
 	/** 当前关键帧执行的函数 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineEvent EventFunc;
+		FString EventFuncGuName;
 
 	FEventKey() : Time(0),Guid(UKismetGuidLibrary::NewGuid().ToString()){ }
 
@@ -300,6 +298,10 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FString GuName;
 
+	/** 需要在Update调用的事件函数 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+		FString EventFuncGuName;
+
 	FTrackInfoBase()
 		: GuName(UKismetGuidLibrary::NewGuid().ToString())
 	{ }
@@ -319,10 +321,6 @@ struct FEventTrackInfo : public FTrackInfoBase
 public:
 	GENERATED_USTRUCT_BODY()
 
-	/** 需要在Update调用的事件函数 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineEvent OnEventFunc;
-
 	/** 轨道对应的曲线信息 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FEventCurveInfo CurveInfo;
@@ -334,10 +332,6 @@ struct FFloatTrackInfo : public FTrackInfoBase
 {
 public:
 	GENERATED_USTRUCT_BODY()
-
-	/** 需要在Update调用的Float事件函数 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineFloat OnEventFunc;
 
 	/** 轨道对应的曲线信息 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -351,10 +345,6 @@ struct FVectorTrackInfo : public FTrackInfoBase
 public:
 	GENERATED_USTRUCT_BODY()
 
-	/** 需要在Update调用的Vector事件函数 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineVector OnEventFunc;
-
 	/** 轨道对应的曲线信息 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FVectorCurveInfo CurveInfo;
@@ -367,29 +357,9 @@ struct FLinearColorTrackInfo : public FTrackInfoBase
 public:
 	GENERATED_USTRUCT_BODY()
 
-	/** 需要在Update调用的LinearColor事件函数 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineLinearColor OnEventFunc;
-
 	/** 轨道对应的曲线信息 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FLinearColorCurveInfo CurveInfo;
-};
-
-/** LinearColor轨道信息 */
-USTRUCT(BlueprintType)
-struct FEventFunc
-{
-public:
-	GENERATED_USTRUCT_BODY()
-
-	/** Update事件函数，每帧都会执行 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineEvent OnUpdateEventFunc;
-
-	/** Update事件函数，每帧都会执行 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FOnTimelineEvent OnFinishedEventFunc;
 };
 
 /** 时间线设置 */
@@ -407,9 +377,13 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		bool bIgnoreTimeDilation;
 
-	/** 播放方法 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FEventFunc EventFunc;
+	/** Update事件函数，每帧都会执行 */
+	UPROPERTY(BlueprintReadOnly)
+		FString UpdateEventGuName;
+
+	/** Update事件函数，每帧都会执行 */
+	UPROPERTY(BlueprintReadOnly)
+		FString FinishedEventGuName;
 
 	/** 播放方法 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
@@ -439,8 +413,8 @@ public:
 			A.PlayRate == B.PlayRate &&
 			A.bIgnoreTimeDilation == B.bIgnoreTimeDilation &&
 			A.bIsLoop == B.bIsLoop &&
-			A.EventFunc.OnUpdateEventFunc == B.EventFunc.OnUpdateEventFunc &&
-			A.EventFunc.OnFinishedEventFunc == B.EventFunc.OnFinishedEventFunc;
+			A.UpdateEventGuName == B.UpdateEventGuName &&
+			A.FinishedEventGuName == B.FinishedEventGuName;
 	}
 
 	/** Hash校验。强调一下，不要给相同的GUID，其他东西不管 */
@@ -450,8 +424,8 @@ public:
 
 		Hash = HashCombine(Hash, GetTypeHash(Key.GuName));
 		Hash = HashCombine(Hash, GetTypeHash(Key.LengthMode));
-		Hash = HashCombine(Hash, GetTypeHash(Key.EventFunc.OnFinishedEventFunc));
-		Hash = HashCombine(Hash, GetTypeHash(Key.EventFunc.OnUpdateEventFunc));
+		Hash = HashCombine(Hash, GetTypeHash(Key.FinishedEventGuName));
+		Hash = HashCombine(Hash, GetTypeHash(Key.UpdateEventGuName));
 		Hash = HashCombine(Hash, GetTypeHash(Key.PlayMethod));
 		Hash = HashCombine(Hash, GetTypeHash(Key.PlayRate));
 		Hash = HashCombine(Hash, GetTypeHash(Key.bIgnoreTimeDilation));
@@ -500,16 +474,6 @@ public:
 	/** 记录当前位置 */
 	UPROPERTY()
 		float Position;
-
-	/** 记录是否正在播放 */
-	UPROPERTY()
-		bool IsPlaying;
-
-	/** 记录是否停止了播放(暂停也是停止) */
-	UPROPERTY()
-		bool IsStop;
-	UPROPERTY()
-		bool bReversePlayback;
 	#pragma endregion 保存当前时间线状态的变量
 
 	/** 如果GUID都相同了，那就认为是一样的。所以不要给相同的GUID，其他东西不管 */
