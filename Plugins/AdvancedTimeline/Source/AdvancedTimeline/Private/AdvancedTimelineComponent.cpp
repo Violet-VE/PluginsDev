@@ -27,27 +27,27 @@ UAdvancedTimelineComponent::UAdvancedTimelineComponent(const FObjectInitializer&
 	PrimaryComponentTick.TickGroup = TG_PrePhysics;
 }
 
-// Finished
+
 void UAdvancedTimelineComponent::Activate(bool bReset)
 {
 	Super::Activate(bReset);
 	PrimaryComponentTick.SetTickFunctionEnable(true);
 }
 
-// Finished
+
 void UAdvancedTimelineComponent::Deactivate()
 {
 	Super::Deactivate();
 	PrimaryComponentTick.SetTickFunctionEnable(false);
 }
 
-// Finished
+
 bool UAdvancedTimelineComponent::IsReadyForOwnerToAutoDestroy() const
 {
 	return !PrimaryComponentTick.IsTickFunctionEnabled();
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::TickComponent(float DeltaTime, ELevelTick Tick,
 	FActorComponentTickFunction* ThisTickFunction)
 {
@@ -55,7 +55,7 @@ void UAdvancedTimelineComponent::TickComponent(float DeltaTime, ELevelTick Tick,
 
 	if (Timelines.Num() > 0)
 	{
-		UE_LOG(LogAdvTimeline, Warning, TEXT("Ticking"));
+		//UE_LOG(LogAdvTimeline, Warning, TEXT("Ticking"));
 		for (TPair<FString, FTimelineInfo> ThisTimeline : Timelines)
 		{
 			if (!ValidFTimelineInfo(&ThisTimeline.Value)) continue;
@@ -82,9 +82,10 @@ void UAdvancedTimelineComponent::TickComponent(float DeltaTime, ELevelTick Tick,
 
 			if (!IsNetSimulating())
 			{
+				EPlayStatus PlayStatus = GetPlayStatus(ThisTimeline.Value.GuName);
 				// Do not deactivate if we are done, since bActive is a replicated property and we shouldn't have simulating
 				// clients touch replicated variables.
-				if (!ThisTimeline.Value.IsPlaying)
+				if (!(PlayStatus == EPlayStatus::ReversePlaying || PlayStatus == EPlayStatus::ForwardPlaying))
 				{
 					Deactivate();
 				}
@@ -93,7 +94,7 @@ void UAdvancedTimelineComponent::TickComponent(float DeltaTime, ELevelTick Tick,
 	}
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::TickTimeline(const FString InTimelineGuName, float DeltaTime)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -110,12 +111,13 @@ void UAdvancedTimelineComponent::TickTimeline(const FString InTimelineGuName, fl
 		FTimelineSetting* ThisSetting;
 		QuerySetting(ThisTimeline->SettingGuName, ThisSetting);
 		if (ValidFTimelineSetting(ThisSetting)) {
+			EPlayStatus playStatus = GetPlayStatus(ThisTimeline->GuName);
 			bool bIsFinished = false;
 
-			if (ThisTimeline->IsPlaying)
+			if (playStatus == EPlayStatus::ReversePlaying || playStatus == EPlayStatus::ForwardPlaying)
 			{
 				const float TimelineLength = GetTimelineLength(ThisTimeline->GuName);
-				const float EffectiveDeltaTime = DeltaTime * (ThisTimeline->bReversePlayback ? (-ThisSetting->PlayRate) : (ThisSetting->PlayRate));
+				const float EffectiveDeltaTime = DeltaTime * (playStatus == EPlayStatus::ReversePlaying ? (-ThisSetting->PlayRate) : (ThisSetting->PlayRate));
 
 				float NewPosition = ThisTimeline->Position + EffectiveDeltaTime;
 
@@ -187,13 +189,16 @@ void UAdvancedTimelineComponent::TickTimeline(const FString InTimelineGuName, fl
 
 			// Notify user that timeline finished
 			if (bIsFinished)
-				ThisSetting->EventFunc.OnFinishedEventFunc.ExecuteIfBound();
+			{
+				ThisTimeline->PlayStatus = EPlayStatus::Stop;
+				AdvTimelineFinishedDelegate.Broadcast(ThisSetting->FinishedEventGuName);
+			}
 		}
 	}
-	PrintError(LOCTEXT("TickTimelineError","Tick timeline with errors! Please check if the required parameters are filled in the timeline!"));
+	else PrintError(LOCTEXT("TickTimelineError","Tick timeline with errors! Please check if the required parameters are filled in the timeline!"));
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::Play(const FString InTimelineGuName, const EPlayMethod PlayMethod)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -210,24 +215,30 @@ void UAdvancedTimelineComponent::Play(const FString InTimelineGuName, const EPla
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			Activate();
 			if (PlayMethod == EPlayMethod::PlayOnStart)
+			{
 				SetPlaybackPosition(ThisTimeline->GuName, 0.f, true);
+				ThisTimeline->PlayStatus = EPlayStatus::ForwardPlaying;
+			}
 			else if (PlayMethod == EPlayMethod::Reverse)
-				ThisTimeline->bReversePlayback = true;
+			{
+				ThisTimeline->PlayStatus = EPlayStatus::ReversePlaying;
+			}
 			else if (PlayMethod == EPlayMethod::ReverseOnEnd)
 			{
-				ThisTimeline->bReversePlayback = true;
 				SetPlaybackPosition(ThisTimeline->GuName, ThisSetting->Length, true);
+				ThisTimeline->PlayStatus = EPlayStatus::ReversePlaying;
+			}else if (PlayMethod == EPlayMethod::Play)
+			{
+				ThisTimeline->PlayStatus = EPlayStatus::ForwardPlaying;
 			}
-			ThisTimeline->IsPlaying = true;
+			return;
 		}
-		PrintError("Play");
-		return;
 	}
 	PrintError(LOCTEXT("PlayError",
 		"There is an error in the timeline that needs to be played, please check if the required parameters are filled in!"));
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::Stop(const FString InTimelineGuName, const bool bIsPause)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -245,16 +256,19 @@ void UAdvancedTimelineComponent::Stop(const FString InTimelineGuName, const bool
 			if (!bIsPause)
 			{
 				SetPlaybackPosition(ThisTimeline->GuName, 0.f, true);
+				ThisTimeline->PlayStatus = EPlayStatus::Stop;
 			}
-			ThisTimeline->IsPlaying = false;
+			else
+			{
+				ThisTimeline->PlayStatus = EPlayStatus::Pause;
+			}
+			return;
 		}
-		PrintError("Stop");
-		return;
 	}
 	PrintError("Stop");
 }
 
-// Finished TODO:Wait Valid
+
 float UAdvancedTimelineComponent::GetPlaybackPosition(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -273,7 +287,7 @@ float UAdvancedTimelineComponent::GetPlaybackPosition(const FString InTimelineGu
 	return 0;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::GetIgnoreTimeDilation(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -290,14 +304,12 @@ bool UAdvancedTimelineComponent::GetIgnoreTimeDilation(const FString InTimelineG
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			return ThisSetting->bIgnoreTimeDilation;
 		}
-		PrintError("GetIgnoreTimeDilation");
-		return false;
 	}
 	PrintError("GetIgnoreTimeDilation");
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 float UAdvancedTimelineComponent::GetPlayRate(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -314,14 +326,12 @@ float UAdvancedTimelineComponent::GetPlayRate(const FString InTimelineGuName)
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			return ThisSetting->PlayRate;
 		}
-		PrintError("GetPlayRate");
-		return false;
 	}
 	PrintError("GetPlayRate");
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 ELengthMode UAdvancedTimelineComponent::GetLengthMode(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -338,14 +348,12 @@ ELengthMode UAdvancedTimelineComponent::GetLengthMode(const FString InTimelineGu
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			return ThisSetting->LengthMode;
 		}
-		PrintError("GetLengthMode");
-		return ELengthMode::Keyframe;
 	}
 	PrintError("GetLengthMode");
 	return ELengthMode::Keyframe;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::GetIsLoop(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -363,12 +371,11 @@ bool UAdvancedTimelineComponent::GetIsLoop(const FString InTimelineGuName)
 			return ThisSetting->bIsLoop;
 		}
 	}
-
 	PrintError("GetIsLoop");
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::GetIsPause(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -381,18 +388,16 @@ bool UAdvancedTimelineComponent::GetIsPause(const FString InTimelineGuName)
 
 	if (QueryTimeline(InTimelineGuName, ThisTimeline))
 	{
-		FTimelineSetting* ThisSetting;
-		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
-			if (ThisTimeline->IsStop && ThisTimeline->Position > 0 && ThisTimeline->Position < ThisSetting->Length)
-				return true;
-		}
+		if (GetPlayStatus(InTimelineGuName) == EPlayStatus::Pause)
+			return true;
+		return false;
 	}
 
 	PrintError("GetIsPause");
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::GetIsPlaying(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -405,14 +410,17 @@ bool UAdvancedTimelineComponent::GetIsPlaying(const FString InTimelineGuName)
 
 	if (QueryTimeline(InTimelineGuName, ThisTimeline))
 	{
-		return ThisTimeline->IsPlaying;
+		EPlayStatus playStatus = GetPlayStatus(InTimelineGuName);
+		if (playStatus == EPlayStatus::ForwardPlaying || playStatus == EPlayStatus::ReversePlaying)
+			return true;
+		return false;
 	}
 
 	PrintError("GetIsPlaying");
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::GetIsStop(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -425,14 +433,16 @@ bool UAdvancedTimelineComponent::GetIsStop(const FString InTimelineGuName)
 	
 	if (QueryTimeline(InTimelineGuName, ThisTimeline))
 	{
-		return ThisTimeline->IsStop;
+		if (GetPlayStatus(InTimelineGuName) == EPlayStatus::Stop)
+			return true;
+		return false;
 	}
 
 	PrintError("GetIsStop");
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::GetAllFloatTracksInfo(const FString InTimelineGuName,
 	TArray<FFloatTrackInfo>& OutFloatTracks)
 {
@@ -463,7 +473,7 @@ void UAdvancedTimelineComponent::GetAllFloatTracksInfo(const FString InTimelineG
 	PrintError("GetAllFloatTracksInfo");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::GetAllEventTracksInfo(const FString InTimelineGuName,
 	TArray<FEventTrackInfo>& OutEventTracks)
 {
@@ -494,7 +504,7 @@ void UAdvancedTimelineComponent::GetAllEventTracksInfo(const FString InTimelineG
 	PrintError("GetAllEventTracksInfo");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::GetAllVectorTracksInfo(const FString InTimelineGuName,
 	TArray<FVectorTrackInfo>& OutVectorTracks)
 {
@@ -525,7 +535,7 @@ void UAdvancedTimelineComponent::GetAllVectorTracksInfo(const FString InTimeline
 	PrintError("GetAllVectorTracksInfo");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::GetAllLinearColorTracksInfo(const FString InTimelineGuName,
 	TArray<FLinearColorTrackInfo>& OutLinearColorTracks)
 {
@@ -556,7 +566,7 @@ void UAdvancedTimelineComponent::GetAllLinearColorTracksInfo(const FString InTim
 	PrintError("GetAllLinearColorTracksInfo");
 }
 
-// Finished TODO:Wait Valid
+
 int UAdvancedTimelineComponent::GetTrackCount(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -578,7 +588,7 @@ int UAdvancedTimelineComponent::GetTrackCount(const FString InTimelineGuName)
 	return 0;
 }
 
-// Finished TODO:Wait Valid
+
 float UAdvancedTimelineComponent::GetMinKeyframeTime(const FString InTimelineGuName)
 {
 	float MinKeyTime = 9999999.0f;
@@ -682,7 +692,7 @@ float UAdvancedTimelineComponent::GetMinKeyframeTime(const FString InTimelineGuN
 	return MinKeyTime;
 }
 
-// Finished TODO:Wait Valid
+
 float UAdvancedTimelineComponent::GetMaxKeyframeTime(const FString InTimelineGuName)
 {
 	float MaxKeyTime = 0.0f;
@@ -787,7 +797,7 @@ float UAdvancedTimelineComponent::GetMaxKeyframeTime(const FString InTimelineGuN
 	return MaxKeyTime;
 }
 
-// Finished TODO:Wait Valid
+
 float UAdvancedTimelineComponent::GetTimelineLength(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -810,10 +820,28 @@ float UAdvancedTimelineComponent::GetTimelineLength(const FString InTimelineGuNa
 	return 0.0f;
 }
 
-// Finished TODO:Wait Valid
-void UAdvancedTimelineComponent::AddUpdateCallback(const FString InTimelineGuName, const FOnTimelineEvent InUpdateEvent)
+
+EPlayStatus UAdvancedTimelineComponent::GetPlayStatus(const FString InTimelineGuName)
 {
-	if (InTimelineGuName.IsEmpty() || !InUpdateEvent.IsBound())
+	if (InTimelineGuName.IsEmpty())
+	{
+		PrintEmptyError();
+		return EPlayStatus::Stop;
+	}
+
+	FTimelineInfo* ThisTimeline;
+	if (QueryTimeline(InTimelineGuName, ThisTimeline))
+	{
+		return ThisTimeline->PlayStatus;
+	}
+	PrintError("GetPlayStatus");
+	return EPlayStatus::Stop;
+}
+
+
+void UAdvancedTimelineComponent::AddUpdateCallback(const FString InTimelineGuName, const FString InUpdateEventGuName)
+{
+	if (InTimelineGuName.IsEmpty() || InUpdateEventGuName.IsEmpty())
 	{
 		PrintEmptyError();
 		return;
@@ -823,7 +851,8 @@ void UAdvancedTimelineComponent::AddUpdateCallback(const FString InTimelineGuNam
 	if (QueryTimeline(InTimelineGuName, ThisTimeline)) {
 		FTimelineSetting* ThisSetting;
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
-			ThisSetting->EventFunc.OnUpdateEventFunc = InUpdateEvent;
+			ThisSetting->UpdateEventGuName = InUpdateEventGuName;
+			return;
 		}
 		PrintError("AddUpdateCallback");
 		return;
@@ -831,8 +860,8 @@ void UAdvancedTimelineComponent::AddUpdateCallback(const FString InTimelineGuNam
 	PrintError("AddUpdateCallback");
 }
 
-// Finished TODO:Wait Valid
-void UAdvancedTimelineComponent::AddFinishedCallback(const FString InTimelineGuName, const FOnTimelineEvent InFinishedEvent)
+
+void UAdvancedTimelineComponent::AddFinishedCallback(const FString InTimelineGuName, const FString InFinishedEventGuName)
 {
 	if (InTimelineGuName.IsEmpty())
 	{
@@ -844,7 +873,8 @@ void UAdvancedTimelineComponent::AddFinishedCallback(const FString InTimelineGuN
 	if (QueryTimeline(InTimelineGuName, ThisTimeline)) {
 		FTimelineSetting* ThisSetting;
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
-			ThisSetting->EventFunc.OnFinishedEventFunc = InFinishedEvent;
+			ThisSetting->FinishedEventGuName=InFinishedEventGuName;
+			return;
 		}
 		PrintError("AddFinishedCallback");
 		return;
@@ -852,7 +882,7 @@ void UAdvancedTimelineComponent::AddFinishedCallback(const FString InTimelineGuN
 	PrintError("AddFinishedCallback");
 }
 
-// Finished
+
 void UAdvancedTimelineComponent::AddTimelineInfo(const FTimelineInfo InTimeline,const FTimelineSetting InSetting)
 {
 	if (!ValidFTimelineInfo(&InTimeline))
@@ -865,7 +895,7 @@ void UAdvancedTimelineComponent::AddTimelineInfo(const FTimelineInfo InTimeline,
 	SettingList.Add(InTimeline.SettingGuName, InSetting);
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::SaveSetting(const FTimelineSetting InTimelineSetting)
 {
 	if (ValidFTimelineSetting(&InTimelineSetting))
@@ -877,7 +907,7 @@ void UAdvancedTimelineComponent::SaveSetting(const FTimelineSetting InTimelineSe
 	SettingList.Add(InTimelineSetting.GuName,InTimelineSetting);
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::AddFloatTrack(const FString InTimelineGuName, FFloatTrackInfo InFloatTrack)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -885,22 +915,36 @@ void UAdvancedTimelineComponent::AddFloatTrack(const FString InTimelineGuName, F
 		PrintEmptyError();
 		return;
 	}
-	if (ValidFTrackInfo(&InFloatTrack))
+	if (!ValidFTrackInfo(&InFloatTrack))
 	{
 		PrintError(LOCTEXT("AddFloatTrackError",
 			"There is an error in the FloatTrack passed in, please check if you filled in the required fields!"));
 		return;
 	}
 
+	if (UCurveFloat* ThisFloatCurve = InFloatTrack.CurveInfo.CurveObj)
+	{
+		if (ThisFloatCurve->FloatCurve.GetNumKeys() > 0)
+		{
+			for (auto It(ThisFloatCurve->FloatCurve.GetKeyIterator()); It; ++It)
+			{
+				FKeyInfo ThisFloatKey;
+				ThisFloatKey.BaseKey = *It;
+				ThisFloatKey.InterpMode = FKeyInfo::ConversionKeyModeToInterpMode(*It);
+				InFloatTrack.CurveInfo.CurveKeyInfo.Add(ThisFloatKey);
+			}
+		}
+	}
 	FTimelineInfo* ThisTimeline;
 	
 	if (QueryTimeline(InTimelineGuName, ThisTimeline)) {
 		ThisTimeline->FloatTracks.Add(InFloatTrack.GuName, InFloatTrack);
+		return;
 	}
 	PrintError("AddFloatTrack");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::AddEventTrack(const FString InTimelineGuName, FEventTrackInfo InEventTrack)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -908,22 +952,39 @@ void UAdvancedTimelineComponent::AddEventTrack(const FString InTimelineGuName, F
 		PrintEmptyError();
 		return;
 	}
-	if (ValidFTrackInfo(&InEventTrack))
+
+	if (!ValidFTrackInfo(&InEventTrack))
 	{
 		PrintError(LOCTEXT("AddEventTrackError",
 			"There is an error in the EventTrack passed in, please check if you filled in the required fields!"));
 		return;
 	}
 
+	if (UCurveFloat* ThisEventCurve = InEventTrack.CurveInfo.CurveObj)
+	{
+		if (ThisEventCurve->FloatCurve.GetNumKeys() > 0)
+		{
+			for (auto It(ThisEventCurve->FloatCurve.GetKeyIterator()); It; ++It)
+			{
+				FEventKey ThisEventKey;
+				ThisEventKey.BaseKey = *It;
+				ThisEventKey.EventFuncGuName = InEventTrack.EventFuncGuName;
+				ThisEventKey.Time = It->Time;
+				InEventTrack.CurveInfo.EventKey.Add(ThisEventKey);
+			}
+		}
+	}
+
 	FTimelineInfo* ThisTimeline;
 	
 	if (QueryTimeline(InTimelineGuName, ThisTimeline)) {
 		ThisTimeline->EventTracks.Add(InEventTrack.GuName, InEventTrack);
+		return;
 	}
 	PrintError("AddEventTrack");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::AddVectorTrack(const FString InTimelineGuName, FVectorTrackInfo InVectorTrack)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -931,22 +992,42 @@ void UAdvancedTimelineComponent::AddVectorTrack(const FString InTimelineGuName, 
 		PrintEmptyError();
 		return;
 	}
-	if (ValidFTrackInfo(&InVectorTrack))
+	if (!ValidFTrackInfo(&InVectorTrack))
 	{
 		PrintError(LOCTEXT("AddVectorTrackError",
 			"There is an error in the VectorTrack passed in, please check if you filled in the required fields!"));
 		return;
 	}
 
+	if (UCurveVector* ThisVectorCurve = InVectorTrack.CurveInfo.CurveObj)
+	{
+		for (int i = 0; i < 3; i++)
+		{
+			if (ThisVectorCurve->FloatCurves[i].GetNumKeys() > 0)
+			{
+				for (auto It(ThisVectorCurve->FloatCurves[i].GetKeyIterator()); It; ++It)
+				{
+					FKeyInfo ThisVectorKey;
+					ThisVectorKey.BaseKey = *It;
+					ThisVectorKey.InterpMode = FKeyInfo::ConversionKeyModeToInterpMode(*It);
+					if (i == 0) InVectorTrack.CurveInfo.XKeyInfo.Add(ThisVectorKey);
+					else if (i == 1) InVectorTrack.CurveInfo.YKeyInfo.Add(ThisVectorKey);
+					else if (i == 2) InVectorTrack.CurveInfo.ZKeyInfo.Add(ThisVectorKey);
+				}
+			}
+		}
+	}
+
 	FTimelineInfo* ThisTimeline;
 	
 	if (QueryTimeline(InTimelineGuName, ThisTimeline)) {
 		ThisTimeline->VectorTracks.Add(InVectorTrack.GuName, InVectorTrack);
+		return;
 	}
 	PrintError("AddVectorTrack");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::AddLinearColorTrack(const FString InTimelineGuName, FLinearColorTrackInfo InLinearColorTrack)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -954,26 +1035,48 @@ void UAdvancedTimelineComponent::AddLinearColorTrack(const FString InTimelineGuN
 		PrintEmptyError();
 		return;
 	}
-	if (ValidFTrackInfo(&InLinearColorTrack))
+	if (!ValidFTrackInfo(&InLinearColorTrack))
 	{
 		PrintError(LOCTEXT("AddLinearColorTrackError",
 			"There is an error in the LinearColorTrack passed in, please check if you filled in the required fields!"));
 		return;
 	}
 
+	if (UCurveLinearColor* ThisLinearColorCurve = InLinearColorTrack.CurveInfo.CurveObj)
+	{
+
+		for (int i = 0; i < 4; i++)
+		{
+			if (ThisLinearColorCurve->FloatCurves[i].GetNumKeys() > 0)
+			{
+				for (auto It(ThisLinearColorCurve->FloatCurves[i].GetKeyIterator()); It; ++It)
+				{
+					FKeyInfo ThisLinearColorKey;
+					ThisLinearColorKey.BaseKey = *It;
+					ThisLinearColorKey.InterpMode = FKeyInfo::ConversionKeyModeToInterpMode(*It);
+					if (i == 0) InLinearColorTrack.CurveInfo.RKeyInfo.Add(ThisLinearColorKey);
+					else if (i == 1) InLinearColorTrack.CurveInfo.GKeyInfo.Add(ThisLinearColorKey);
+					else if (i == 2) InLinearColorTrack.CurveInfo.BKeyInfo.Add(ThisLinearColorKey);
+					else if (i == 3) InLinearColorTrack.CurveInfo.AKeyInfo.Add(ThisLinearColorKey);
+				}
+			}
+		}
+	}
+
 	FTimelineInfo* ThisTimeline;
 	
 	if (QueryTimeline(InTimelineGuName, ThisTimeline)) {
 		ThisTimeline->LinearColorTracks.Add(InLinearColorTrack.GuName, InLinearColorTrack);
+		return;
 	}
 	PrintError("AddLinearColorTrack");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::GenericAddTrack(
 	const FString InTimelineGuName,
 	const EAdvTimelineType InTrackType,
-	const UScriptStruct* StructType, 
+	const UScriptStruct* StructType,
 	void* InTrack)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -990,7 +1093,7 @@ void UAdvancedTimelineComponent::GenericAddTrack(
 		if (Cast<UStruct>(StructType) == FFloatTrackInfo::StaticStruct())
 		{
 			FFloatTrackInfo* Float = (FFloatTrackInfo*)(InTrack);
-			if (ValidFTrackInfo(Float))
+			if (!ValidFTrackInfo(Float))
 			{
 				PrintError(LOCTEXT("GenericAddTrackError1",
 					"There is an error in the incoming FloatTrack, \
@@ -1005,7 +1108,7 @@ void UAdvancedTimelineComponent::GenericAddTrack(
 		if (Cast<UStruct>(StructType) == FEventTrackInfo::StaticStruct())
 		{
 			FEventTrackInfo* Event = (FEventTrackInfo*)(InTrack);
-			if (ValidFTrackInfo(Event))
+			if (!ValidFTrackInfo(Event))
 			{
 				PrintError(LOCTEXT("GenericAddTrackError1",
 					"There is an error in the incoming FloatTrack, \
@@ -1020,7 +1123,7 @@ void UAdvancedTimelineComponent::GenericAddTrack(
 		if (Cast<UStruct>(StructType) == FVectorTrackInfo::StaticStruct())
 		{
 			FVectorTrackInfo* Vector = (FVectorTrackInfo*)(InTrack);
-			if (ValidFTrackInfo(Vector))
+			if (!ValidFTrackInfo(Vector))
 			{
 				PrintError(LOCTEXT("GenericAddTrackError1",
 					"There is an error in the incoming FloatTrack, \
@@ -1035,7 +1138,7 @@ void UAdvancedTimelineComponent::GenericAddTrack(
 		if (Cast<UStruct>(StructType) == FLinearColorTrackInfo::StaticStruct())
 		{
 			FLinearColorTrackInfo* LinearColor = (FLinearColorTrackInfo*)(InTrack);
-			if (ValidFTrackInfo(LinearColor))
+			if (!ValidFTrackInfo(LinearColor))
 			{
 				PrintError(LOCTEXT("GenericAddTrackError1",
 					"There is an error in the incoming FloatTrack, \
@@ -1045,11 +1148,12 @@ void UAdvancedTimelineComponent::GenericAddTrack(
 			AddLinearColorTrack(InTimelineGuName, *LinearColor);
 		}
 		#pragma endregion LinearColorTrack
+		return;
 	}
 	PrintError("GenericAddTrack");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::SetLength(const FString InTimelineGuName, const float InNewTime)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -1063,6 +1167,7 @@ void UAdvancedTimelineComponent::SetLength(const FString InTimelineGuName, const
 		FTimelineSetting* ThisSetting;
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			ThisSetting->Length = InNewTime;
+			return;
 		}
 		PrintError("SetLength");
 		return;
@@ -1070,7 +1175,7 @@ void UAdvancedTimelineComponent::SetLength(const FString InTimelineGuName, const
 	PrintError("SetLength");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::SetIgnoreTimeDilation(const FString InTimelineGuName, const bool IsIgnoreTimeDilation)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -1084,6 +1189,7 @@ void UAdvancedTimelineComponent::SetIgnoreTimeDilation(const FString InTimelineG
 		FTimelineSetting* ThisSetting;
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			ThisSetting->bIgnoreTimeDilation = IsIgnoreTimeDilation;
+			return;
 		}
 		PrintError("SetIgnoreTimeDilation");
 		return;
@@ -1091,13 +1197,12 @@ void UAdvancedTimelineComponent::SetIgnoreTimeDilation(const FString InTimelineG
 	PrintError("SetIgnoreTimeDilation");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::SetPlaybackPosition(
 	const FString InTimelineGuName,
 	const float InNewTime,
 	const bool bIsFireEvent, 
-	const bool bIsFireUpdate, 
-	const bool bIsFirePlay)
+	const bool bIsFireUpdate)
 {
 	if (InTimelineGuName.IsEmpty())
 	{
@@ -1110,45 +1215,46 @@ void UAdvancedTimelineComponent::SetPlaybackPosition(
 
 	if (ValidFTimelineInfo(ThisTimeline))
 	{
+		EPlayStatus playStatus = GetPlayStatus(ThisTimeline->GuName);
 		const float OldPosition = ThisTimeline->Position;
 		ThisTimeline->Position = InNewTime;
 
 		// Iterate over each vector interpolation
 		for (const TPair<FString,FVectorTrackInfo> CurrentEntry : ThisTimeline->VectorTracks)
 		{
-			if (CurrentEntry.Value.CurveInfo.CurveObj && CurrentEntry.Value.OnEventFunc.IsBound())
+			if (CurrentEntry.Value.CurveInfo.CurveObj && !CurrentEntry.Value.EventFuncGuName.IsEmpty())
 			{
 				// Get vector from curve
 				FVector const Vec = CurrentEntry.Value.CurveInfo.CurveObj->GetVectorValue(GetPlaybackPosition(ThisTimeline->GuName));
 
 				// Pass vec to specified function
-				CurrentEntry.Value.OnEventFunc.ExecuteIfBound(Vec);
+				AdvTimelineVectorDelegate.Broadcast(CurrentEntry.Value.EventFuncGuName,Vec);
 			}
 		}
 
 		// Iterate over each float interpolation
 		for (const TPair < FString, FFloatTrackInfo> CurrentEntry : ThisTimeline->FloatTracks)
 		{
-			if (CurrentEntry.Value.CurveInfo.CurveObj && CurrentEntry.Value.OnEventFunc.IsBound())
+			if (CurrentEntry.Value.CurveInfo.CurveObj && !CurrentEntry.Value.EventFuncGuName.IsEmpty())
 			{
 				// Get float from func
 				const float Val = CurrentEntry.Value.CurveInfo.CurveObj->GetFloatValue(GetPlaybackPosition(ThisTimeline->GuName));
 
 				// Pass float to specified function
-				CurrentEntry.Value.OnEventFunc.ExecuteIfBound(Val);
+				AdvTimelineFloatDelegate.Broadcast(CurrentEntry.Value.EventFuncGuName, Val);
 			}
 		}
 
 		// Iterate over each color interpolation
 		for (const TPair < FString, FLinearColorTrackInfo> CurrentEntry : ThisTimeline->LinearColorTracks)
 		{
-			if (CurrentEntry.Value.CurveInfo.CurveObj && CurrentEntry.Value.OnEventFunc.IsBound())
+			if (CurrentEntry.Value.CurveInfo.CurveObj && !CurrentEntry.Value.EventFuncGuName.IsEmpty())
 			{
 				// Get vector from curve
 				const FLinearColor Color = CurrentEntry.Value.CurveInfo.CurveObj->GetLinearColorValue(GetPlaybackPosition(ThisTimeline->GuName));
 
 				// Pass vec to specified function
-				CurrentEntry.Value.OnEventFunc.ExecuteIfBound(Color);
+				AdvTimelineLinearColorDelegate.Broadcast(CurrentEntry.Value.EventFuncGuName, Color);
 			}
 		}
 
@@ -1158,7 +1264,7 @@ void UAdvancedTimelineComponent::SetPlaybackPosition(
 		{
 			// If playing sequence forwards.
 			float MinTime, MaxTime;
-			if (!ThisTimeline->bReversePlayback)
+			if (!(playStatus == EPlayStatus::ReversePlaying))
 			{
 				MinTime = OldPosition;
 				MaxTime = ThisTimeline->Position;
@@ -1191,7 +1297,7 @@ void UAdvancedTimelineComponent::SetPlaybackPosition(
 
 					// Need to be slightly careful here and make behavior for firing events symmetric when playing forwards of backwards.
 					bool bFireThisEvent = false;
-					if (!ThisTimeline->bReversePlayback)
+					if (!(playStatus == EPlayStatus::ReversePlaying))
 					{
 						if (EventTime >= MinTime && EventTime < MaxTime)
 						{
@@ -1208,21 +1314,18 @@ void UAdvancedTimelineComponent::SetPlaybackPosition(
 
 					if (bFireThisEvent)
 					{
-						ThisEventTrack.Value.OnEventFunc.ExecuteIfBound();
+						AdvTimelineEventDelegate.Broadcast(ThisEventTrack.Value.EventFuncGuName);
 					}
 				}
 			}
-		}
-		if (bIsFirePlay)
-		{
-			Play(ThisTimeline->GuName,EPlayMethod::Play);
 		}
 		if (bIsFireUpdate)
 		{
 			FTimelineSetting* ThisSetting;
 			
 			if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
-				ThisSetting->EventFunc.OnUpdateEventFunc.ExecuteIfBound();
+				AdvTimelineUpdateDelegate.Broadcast(ThisSetting->UpdateEventGuName);
+				return;
 			}
 			// 因为后面没有其他逻辑了，所以直接Return就行，不然会输出两遍Error
 			PrintError("SetPlaybackPosition");
@@ -1232,7 +1335,7 @@ void UAdvancedTimelineComponent::SetPlaybackPosition(
 	PrintError("SetPlaybackPosition");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::SetLengthMode(const FString InTimelineGuName, const ELengthMode InLengthMode)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -1246,6 +1349,7 @@ void UAdvancedTimelineComponent::SetLengthMode(const FString InTimelineGuName, c
 		FTimelineSetting* ThisSetting;
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			ThisSetting->LengthMode = InLengthMode;
+			return;
 		}
 		PrintError("SetLengthMode");
 		return;
@@ -1253,7 +1357,7 @@ void UAdvancedTimelineComponent::SetLengthMode(const FString InTimelineGuName, c
 	PrintError("SetLengthMode");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::SetLoop(const FString InTimelineGuName, const bool bIsLoop)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -1267,6 +1371,7 @@ void UAdvancedTimelineComponent::SetLoop(const FString InTimelineGuName, const b
 		FTimelineSetting* ThisSetting;
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			ThisSetting->bIsLoop = bIsLoop;
+			return;
 		}
 		PrintError("SetLoop");
 		return;
@@ -1274,7 +1379,7 @@ void UAdvancedTimelineComponent::SetLoop(const FString InTimelineGuName, const b
 	PrintError("SetLoop");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::SetPlayRate(const FString InTimelineGuName, const float InNewPlayRate)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -1288,6 +1393,7 @@ void UAdvancedTimelineComponent::SetPlayRate(const FString InTimelineGuName, con
 		FTimelineSetting* ThisSetting;
 		if (QuerySetting(ThisTimeline->SettingGuName, ThisSetting)) {
 			ThisSetting->PlayRate = InNewPlayRate;
+			return;
 		}
 		PrintError("SetPlayRate");
 		return;
@@ -1295,7 +1401,7 @@ void UAdvancedTimelineComponent::SetPlayRate(const FString InTimelineGuName, con
 	PrintError("SetPlayRate");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::ChangeTrackCurve(const FString InTrackGuName, UCurveBase* InCurve)
 {
 	if (InTrackGuName.IsEmpty() || !InCurve)
@@ -1325,9 +1431,7 @@ void UAdvancedTimelineComponent::ChangeTrackCurve(const FString InTrackGuName, U
 							{
 								FKeyInfo ThisKey;
 								ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
-								EInterpCurveMode InterpMode = CIM_Unknown;
-								FKeyInfo::ConversionKeyModeToInterpMode(*It, InterpMode);
-								ThisKey.InterpMode = InterpMode;
+								ThisKey.InterpMode = FKeyInfo::ConversionKeyModeToInterpMode(*It);
 								ThisKey.BaseKey = *It;
 								FloatTrack->CurveInfo.CurveKeyInfo.Add(ThisKey);
 							}
@@ -1369,37 +1473,20 @@ void UAdvancedTimelineComponent::ChangeTrackCurve(const FString InTrackGuName, U
 					{
 						VectorTrack->CurveInfo.CurveObj = Cast < UCurveVector>(InCurve);
 						VectorTrack->CurveInfo.CurveType = EAdvTimelineType::Vector;
-						if (VectorTrack->CurveInfo.CurveObj->FloatCurves[0].GetNumKeys() > 0)
+						for (int i = 0;i < 3;i++)
 						{
-							for (auto It(VectorTrack->CurveInfo.CurveObj->FloatCurves[0].GetKeyIterator()); It; ++It)
+							for (auto It(VectorTrack->CurveInfo.CurveObj->FloatCurves[i].GetKeyIterator()); It; ++It)
 							{
-								FKeyInfo ThisKey;
-								ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
-								EInterpCurveMode InterpMode = CIM_Unknown;
-								FKeyInfo::ConversionKeyModeToInterpMode(*It, InterpMode);
-								ThisKey.InterpMode = InterpMode;
-								ThisKey.BaseKey = *It;
-								VectorTrack->CurveInfo.XKeyInfo.Add(ThisKey);
-							}
-							for (auto It(VectorTrack->CurveInfo.CurveObj->FloatCurves[1].GetKeyIterator()); It; ++It)
-							{
-								FKeyInfo ThisKey;
-								ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
-								EInterpCurveMode InterpMode = CIM_Unknown;
-								FKeyInfo::ConversionKeyModeToInterpMode(*It, InterpMode);
-								ThisKey.InterpMode = InterpMode;
-								ThisKey.BaseKey = *It;
-								VectorTrack->CurveInfo.YKeyInfo.Add(ThisKey);
-							}
-							for (auto It(VectorTrack->CurveInfo.CurveObj->FloatCurves[2].GetKeyIterator()); It; ++It)
-							{
-								FKeyInfo ThisKey;
-								ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
-								EInterpCurveMode InterpMode = CIM_Unknown;
-								FKeyInfo::ConversionKeyModeToInterpMode(*It, InterpMode);
-								ThisKey.InterpMode = InterpMode;
-								ThisKey.BaseKey = *It;
-								VectorTrack->CurveInfo.ZKeyInfo.Add(ThisKey);
+								if (VectorTrack->CurveInfo.CurveObj->FloatCurves[i].GetNumKeys() > 0)
+								{
+									FKeyInfo ThisKey;
+									ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
+									ThisKey.InterpMode = FKeyInfo::ConversionKeyModeToInterpMode(*It);
+									ThisKey.BaseKey = *It;
+									if (i == 0) VectorTrack->CurveInfo.XKeyInfo.Add(ThisKey);
+									else if (i == 1) VectorTrack->CurveInfo.YKeyInfo.Add(ThisKey);
+									else if (i == 2) VectorTrack->CurveInfo.ZKeyInfo.Add(ThisKey);
+								}
 							}
 						}
 					}
@@ -1414,48 +1501,22 @@ void UAdvancedTimelineComponent::ChangeTrackCurve(const FString InTrackGuName, U
 					if (ValidFTrackInfo(LinearColorTrack))
 					{
 						LinearColorTrack->CurveInfo.CurveObj = Cast<UCurveLinearColor>(InCurve);
-						LinearColorTrack->CurveInfo.CurveType = EAdvTimelineType::Float;
-						if (LinearColorTrack->CurveInfo.CurveObj->FloatCurves[0].GetNumKeys() > 0)
+						LinearColorTrack->CurveInfo.CurveType = EAdvTimelineType::LinearColor;
+						for (int i = 0; i < 4; i++)
 						{
-							for (auto It(LinearColorTrack->CurveInfo.CurveObj->FloatCurves[0].GetKeyIterator()); It; ++It)
+							for (auto It(LinearColorTrack->CurveInfo.CurveObj->FloatCurves[i].GetKeyIterator()); It; ++It)
 							{
-								FKeyInfo ThisKey;
-								ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
-								EInterpCurveMode InterpMode = CIM_Unknown;
-								FKeyInfo::ConversionKeyModeToInterpMode(*It, InterpMode);
-								ThisKey.InterpMode = InterpMode;
-								ThisKey.BaseKey = *It;
-								LinearColorTrack->CurveInfo.RKeyInfo.Add(ThisKey);
-							}
-							for (auto It(LinearColorTrack->CurveInfo.CurveObj->FloatCurves[1].GetKeyIterator()); It; ++It)
-							{
-								FKeyInfo ThisKey;
-								ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
-								EInterpCurveMode InterpMode = CIM_Unknown;
-								FKeyInfo::ConversionKeyModeToInterpMode(*It, InterpMode);
-								ThisKey.InterpMode = InterpMode;
-								ThisKey.BaseKey = *It;
-								LinearColorTrack->CurveInfo.GKeyInfo.Add(ThisKey);
-							}
-							for (auto It(LinearColorTrack->CurveInfo.CurveObj->FloatCurves[2].GetKeyIterator()); It; ++It)
-							{
-								FKeyInfo ThisKey;
-								ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
-								EInterpCurveMode InterpMode = CIM_Unknown;
-								FKeyInfo::ConversionKeyModeToInterpMode(*It, InterpMode);
-								ThisKey.InterpMode = InterpMode;
-								ThisKey.BaseKey = *It;
-								LinearColorTrack->CurveInfo.BKeyInfo.Add(ThisKey);
-							}
-							for (auto It(LinearColorTrack->CurveInfo.CurveObj->FloatCurves[3].GetKeyIterator()); It; ++It)
-							{
-								FKeyInfo ThisKey;
-								ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
-								EInterpCurveMode InterpMode = CIM_Unknown;
-								FKeyInfo::ConversionKeyModeToInterpMode(*It, InterpMode);
-								ThisKey.InterpMode = InterpMode;
-								ThisKey.BaseKey = *It;
-								LinearColorTrack->CurveInfo.AKeyInfo.Add(ThisKey);
+								if (LinearColorTrack->CurveInfo.CurveObj->FloatCurves[i].GetNumKeys() > 0)
+								{
+									FKeyInfo ThisKey;
+									ThisKey.Guid = UKismetGuidLibrary::NewGuid().ToString();
+									ThisKey.InterpMode = FKeyInfo::ConversionKeyModeToInterpMode(*It);
+									ThisKey.BaseKey = *It;
+									if (i == 0) LinearColorTrack->CurveInfo.RKeyInfo.Add(ThisKey);
+									else if (i == 1) LinearColorTrack->CurveInfo.GKeyInfo.Add(ThisKey);
+									else if (i == 2) LinearColorTrack->CurveInfo.BKeyInfo.Add(ThisKey);
+									else if (i == 3) LinearColorTrack->CurveInfo.AKeyInfo.Add(ThisKey);
+								}
 							}
 						}
 					}
@@ -1463,11 +1524,12 @@ void UAdvancedTimelineComponent::ChangeTrackCurve(const FString InTrackGuName, U
 				break;
 				#pragma endregion LinearColor
 		}
+		return;
 	}
 	PrintError("ChangeTrackCurve");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::ResetTimeline(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -1482,17 +1544,16 @@ void UAdvancedTimelineComponent::ResetTimeline(const FString InTimelineGuName)
 		ThisTimeline->VectorTracks.Empty();
 		ThisTimeline->FloatTracks.Empty();
 		ThisTimeline->LinearColorTracks.Empty();
-		ThisTimeline->IsPlaying = false;
-		ThisTimeline->IsStop = true;
 		ThisTimeline->PlayStatus = EPlayStatus::Stop;
 		ThisTimeline->Position = 0.0f;
 
 		Timelines.Add(ThisTimeline->GuName, *ThisTimeline);
+		return;
 	}
 	PrintError("ResetTimeline");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::ClearTimelineTracks(const FString InTimelineGuName)
 {
 	if (InTimelineGuName.IsEmpty())
@@ -1507,11 +1568,12 @@ void UAdvancedTimelineComponent::ClearTimelineTracks(const FString InTimelineGuN
 		ThisTimeline->FloatTracks.Empty();
 		ThisTimeline->VectorTracks.Empty();
 		ThisTimeline->LinearColorTracks.Empty();
+		return;
 	}
 	PrintError("ClearTimelineTracks");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::ResetTrack(const FString InTrackGuName)
 {
 	if (InTrackGuName.IsEmpty())
@@ -1532,7 +1594,7 @@ void UAdvancedTimelineComponent::ResetTrack(const FString InTrackGuName)
 				{
 					FloatTrack->CurveInfo.CurveKeyInfo.Empty();
 					FloatTrack->CurveInfo.CurveObj = nullptr;
-					FloatTrack->OnEventFunc.Clear();
+					FloatTrack->EventFuncGuName.Empty();
 				}
 				break;
 				#pragma endregion Float
@@ -1543,7 +1605,7 @@ void UAdvancedTimelineComponent::ResetTrack(const FString InTrackGuName)
 				{
 					EventTrack->CurveInfo.EventKey.Empty();
 					EventTrack->CurveInfo.CurveObj = nullptr;
-					EventTrack->OnEventFunc.Clear();
+					EventTrack->EventFuncGuName.Empty();
 				}
 				break;
 				#pragma endregion Event
@@ -1556,7 +1618,7 @@ void UAdvancedTimelineComponent::ResetTrack(const FString InTrackGuName)
 					VectorTrack->CurveInfo.YKeyInfo.Empty();
 					VectorTrack->CurveInfo.ZKeyInfo.Empty();
 					VectorTrack->CurveInfo.CurveObj = nullptr;
-					VectorTrack->OnEventFunc.Clear();
+					VectorTrack->EventFuncGuName.Empty();
 				}
 				break;
 				#pragma endregion Vector
@@ -1570,16 +1632,17 @@ void UAdvancedTimelineComponent::ResetTrack(const FString InTrackGuName)
 					LinearColorTrack->CurveInfo.BKeyInfo.Empty();
 					LinearColorTrack->CurveInfo.AKeyInfo.Empty();
 					LinearColorTrack->CurveInfo.CurveObj = nullptr;
-					LinearColorTrack->OnEventFunc.Clear();
+					LinearColorTrack->EventFuncGuName.Empty();
 				}
 				break;
 				#pragma endregion LinearColor
 		}
+		return;
 	}
 	PrintError("ResetTrack");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::DelTrack(const FString InTrackGuName)
 {
 	if (InTrackGuName.IsEmpty())
@@ -1619,11 +1682,12 @@ void UAdvancedTimelineComponent::DelTrack(const FString InTrackGuName)
 				}
 				break;
 		}
+		return;
 	}
 	PrintError("DelTrack");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::ApplySettingToTimeline(
 	const FString InSettingsName,
 	const FString InTimelineGuName,
@@ -1653,7 +1717,7 @@ void UAdvancedTimelineComponent::ApplySettingToTimeline(
 	PrintError("ApplySettingToTimeline");
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::DelTimeline(const FString InTimelineGuName)
 {
 	if (!InTimelineGuName.IsEmpty() && Timelines.Num() > 1)
@@ -1670,28 +1734,20 @@ void UAdvancedTimelineComponent::DelTimeline(const FString InTimelineGuName)
 	PrintError(LOCTEXT("DelTimelineError","There is only one timeline left! Or the input parameter is empty!"));
 }
 
-// Finished
+
 void UAdvancedTimelineComponent::ClearTimelines()
 {
 	Timelines.Empty();
-	FTimelineInfo ThisTimeline;
-	FTimelineSetting ThisSetting;
-	GenerateDefaultTimeline(ThisTimeline, ThisSetting);
-	AddTimelineInfo(ThisTimeline, ThisSetting);
 }
 
-// Finished TODO:Wait Valid
+
 void UAdvancedTimelineComponent::ClearSettingList()
 {
 	SettingList.Empty();
-	FTimelineInfo ThisTimeline;
-	FTimelineSetting ThisSetting;
-	GenerateDefaultTimeline(ThisTimeline, ThisSetting);
-	SaveSetting(ThisSetting);
 
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::GetTimeline(const FString InTimelineGuName, FTimelineInfo& OutTimelineInfo)
 {
 	if (!InTimelineGuName.IsEmpty() && (Timelines.Num() > 0))
@@ -1709,7 +1765,7 @@ bool UAdvancedTimelineComponent::GetTimeline(const FString InTimelineGuName, FTi
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::GetSetting(const FString InSettingsGuName, FTimelineSetting& OutSetting)
 {
 	if (!InSettingsGuName.IsEmpty() && (SettingList.Num() > 0))
@@ -1727,7 +1783,7 @@ bool UAdvancedTimelineComponent::GetSetting(const FString InSettingsGuName, FTim
 	return false;
 }
 
-// Finished 
+ 
 bool UAdvancedTimelineComponent::QueryTimeline(const FString InTimelineGuName, FTimelineInfo*& OutTimelineInfo)
 {
 	if (!InTimelineGuName.IsEmpty() && (Timelines.Num() > 0))
@@ -1743,7 +1799,7 @@ bool UAdvancedTimelineComponent::QueryTimeline(const FString InTimelineGuName, F
 	return false;
 }
 
-// Finished 
+ 
 bool UAdvancedTimelineComponent::QuerySetting(const FString InSettingsGuName, FTimelineSetting* & OutSetting)
 {
 	if (!InSettingsGuName.IsEmpty() && (SettingList.Num() > 0))
@@ -1759,7 +1815,7 @@ bool UAdvancedTimelineComponent::QuerySetting(const FString InSettingsGuName, FT
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::QueryTrackByGuid(const FString InTrackGuName, EAdvTimelineType& OutTrackType,
 	FTrackInfoBase*& OutTrack, FTimelineInfo*& OutTimeline)
 {
@@ -1824,7 +1880,7 @@ bool UAdvancedTimelineComponent::QueryTrackByGuid(const FString InTrackGuName, E
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::QueryCurveByGuid(const FString InCurveGuid, EAdvTimelineType& OutCurveType,
 	FCurveInfoBase*& OutCurve, FTimelineInfo*& OutTimeline)
 {
@@ -1905,7 +1961,7 @@ bool UAdvancedTimelineComponent::QueryCurveByGuid(const FString InCurveGuid, EAd
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::QueryKeyByGuid(const FString InKeyGuid, 
 	EAdvTimelineType& OutKeyType, 
 	FRichCurveKey*& OutKey,
@@ -2077,7 +2133,7 @@ bool UAdvancedTimelineComponent::QueryKeyByGuid(const FString InKeyGuid,
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::ValidFTimelineInfo(const FTimelineInfo* InTimelineInfo)
 {
 	if (InTimelineInfo &&
@@ -2105,7 +2161,7 @@ bool UAdvancedTimelineComponent::ValidFTimelineInfo(const FTimelineInfo* InTimel
 		#pragma endregion FloatTracks
 
 		#pragma region
-		if (InTimelineInfo->VectorTracks.Num() > 0)
+ 		if (InTimelineInfo->VectorTracks.Num() > 0)
 		{
 			for (TPair < FString, FVectorTrackInfo> ThisTracks : InTimelineInfo->VectorTracks)
 			{
@@ -2132,7 +2188,7 @@ bool UAdvancedTimelineComponent::ValidFTimelineInfo(const FTimelineInfo* InTimel
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::ValidFTimelineSetting(const FTimelineSetting* InSettingsInfo)
 {
 	if (InSettingsInfo && !InSettingsInfo->GuName.IsEmpty())
@@ -2147,10 +2203,10 @@ bool UAdvancedTimelineComponent::ValidFTimelineSetting(const FTimelineSetting* I
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::ValidFTrackInfo(FTrackInfoBase* InTrack)
 {
-	if (!InTrack)
+	if (InTrack)
 	{
 		#pragma region
 		if (const FFloatTrackInfo* FloatTrack = (FFloatTrackInfo*)(InTrack))
@@ -2199,10 +2255,10 @@ bool UAdvancedTimelineComponent::ValidFTrackInfo(FTrackInfoBase* InTrack)
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::ValidFCurveInfo(FCurveInfoBase* InCurve)
 {
-	if (!InCurve) {
+	if (InCurve) {
 		#pragma region
 		if (const FFloatCurveInfo* FloatCurve = (FFloatCurveInfo*)(InCurve))
 		{
@@ -2311,7 +2367,7 @@ bool UAdvancedTimelineComponent::ValidFCurveInfo(FCurveInfoBase* InCurve)
 	return false;
 }
 
-// Finished TODO:Wait Valid
+
 bool UAdvancedTimelineComponent::ValidFKeyInfo(FKeyInfo* InKey)
 {
 	/** 关键帧的值基本都是会默认赋值的，故不需要检查。 */
@@ -2323,7 +2379,7 @@ bool UAdvancedTimelineComponent::ValidFKeyInfo(FKeyInfo* InKey)
 	
 }
 
-// Finished
+
 void UAdvancedTimelineComponent::GenerateDefaultTimeline(FTimelineInfo & OutTimeline, FTimelineSetting & OutSetting)
 {
 	FTimelineInfo DefaultTimeline;
@@ -2334,42 +2390,39 @@ void UAdvancedTimelineComponent::GenerateDefaultTimeline(FTimelineInfo & OutTime
 	DefaultSetting.bIsLoop = false;
 	DefaultSetting.PlayMethod = EPlayMethod::Play;
 	DefaultSetting.LengthMode = ELengthMode::Keyframe;
-	DefaultSetting.Length = 0.0f;
+	DefaultSetting.Length = 5.0f;
 	DefaultSetting.GuName = UKismetGuidLibrary::NewGuid().ToString();
 	DefaultTimeline.GuName = UKismetGuidLibrary::NewGuid().ToString();
 	DefaultTimeline.SettingGuName = DefaultSetting.GuName;
-	DefaultTimeline.IsPlaying = false;
 	DefaultTimeline.PlayStatus = EPlayStatus::Stop;
-	DefaultTimeline.bReversePlayback = false;
 	DefaultTimeline.Position = 0.0f;
-	DefaultTimeline.IsStop = true;
 
 	OutTimeline = DefaultTimeline;
 	OutSetting = DefaultSetting;
 }
 
-// Finished
+
 void UAdvancedTimelineComponent::PrintError()
 {
 	const FString ErrorInfo = FInternationalization::ForUseOnlyByLocMacroAndGraphNodeTextLiterals_CreateText(TEXT("There is an error here, please check him!"), TEXT(LOCTEXT_NAMESPACE), TEXT("GenericError")).ToString();
 	UE_LOG(LogAdvTimeline, Error, TEXT("%s"), *ErrorInfo)
 }
 
-// Finished
+
 void UAdvancedTimelineComponent::PrintError(const FString InFuncName)
 {
 	const FString ErrorInfo = LOCTEXT("FuncError", "function has an error!").ToString();
 	UE_LOG(LogAdvTimeline, Error, TEXT("%s %s"), *InFuncName,*ErrorInfo)
 }
 
-// Finished
+
 void UAdvancedTimelineComponent::PrintError(const FText InErrorInfo)
 {
 	const FString ErrorInfo = InErrorInfo.ToString();
 	UE_LOG(LogAdvTimeline, Error, TEXT("%s"), *ErrorInfo)
 }
 
-// Finished
+
 void UAdvancedTimelineComponent::PrintEmptyError()
 {
 	//GWorld->GetBlueprintObjectsBeingDebugged()
@@ -2378,6 +2431,11 @@ void UAdvancedTimelineComponent::PrintEmptyError()
 	const FString ErrorInfo = LOCTEXT("EmptyError", "The incoming parameter cannot be empty!").ToString();
 	//CompilerLog->Error(*ErrorInfo, *StrToken);
 	UE_LOG(LogAdvTimeline, Error, TEXT("%s"), *ErrorInfo)
+}
+
+UObject* UAdvancedTimelineComponent::TestFunc(UObject* InObject)
+{
+	return InObject;
 }
 
 #undef LOCTEXT_NAMESPACE
