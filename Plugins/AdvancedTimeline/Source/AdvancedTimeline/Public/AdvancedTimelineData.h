@@ -24,17 +24,10 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FOnAdvancedTimelineEventLinearColor
  *	单纯的存放数据结构的文件。比如枚举和结构体
  */
 
-/** 存放全局的一些变量(看情况添加，没有就不加了) */
-namespace AdvTimelineHelper
-{
-	/** 变量 */
-	
-}
-
 
 /** 枚举 */
 
-/** 高级时间线类型。曲线、关键帧、轨道都用这个来判断 */
+/** 类型。曲线、关键帧、轨道都用这个来判断 */
 UENUM(BlueprintType)
 enum class EAdvTimelineType : uint8
 {
@@ -44,7 +37,7 @@ enum class EAdvTimelineType : uint8
 	LinearColor
 };
 
-/** 时间点模式。即是否使用关键帧作为轨道的播放时间。 */
+/** 长度模式。即是否使用关键帧作为轨道的播放时间。 */
 UENUM(BlueprintType)
 enum class ELengthMode : uint8
 {
@@ -95,11 +88,11 @@ public:
 	UPROPERTY(BlueprintReadOnly)
 		FString Guid;
 
-	/** 保存一下关键帧的信息，方便后续查找。 */
+	/** 保存一下关键帧，方便后续查找及使用。 */
 	UPROPERTY()
 		FRichCurveKey BaseKey;
 
-	/** 当前关键帧的插值模式，只是因为官方的插值模式分了两个 */
+	/** 当前关键帧的插值模式，只是因为官方的插值模式分了两个，所以手动转换一下。转换函数用官方的转换改的 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		TEnumAsByte<EInterpCurveMode> InterpMode;
 	
@@ -162,7 +155,7 @@ public:
 	UPROPERTY(BlueprintReadOnly)
 		EAdvTimelineType CurveType;
 
-	/** 曲线没有结束时间和开始时间 */
+	/** 曲线依托于轨道而使用，但可独立存在 */
 
 };
 USTRUCT(BlueprintType)
@@ -178,13 +171,11 @@ struct FEventKey
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		float Time;
 
-	/** 保存一下关键帧的信息，方便后续查找。 */
+	/** 保存一下关键帧，方便后续查找及使用。 */
 	UPROPERTY()
 		FRichCurveKey BaseKey;
 
-	/** 当前关键帧执行的函数 */
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-		FString EventFuncGuName;
+	/** 这里跟官方不一样的一点，不会保存具体的执行函数，因为不会按照关键帧的事件来执行，而是直接执行轨道上的事件 */
 
 	FEventKey() : Time(0),Guid(UKismetGuidLibrary::NewGuid().ToString()){ }
 
@@ -199,14 +190,13 @@ public:
 
 	FEventCurveInfo(): FCurveInfoBase(EAdvTimelineType::Event){}
 
-	/** 保存曲线的蓝图资源(这里可以决定是否使用蓝图的曲线资源，如果不使用，应该可以实现增删改查关键帧操作，后续补充)
-	 *	自己实现一套太麻烦，暂不考虑
-	 *	可以通过这个蓝图资源在C++中操作UE官方的曲线，比如添加删除关键帧，获取帧内容等
+	/** 保存曲线的蓝图资源
+	 *	可以通过这个蓝图资源在C++中操作UE官方的曲线，比如增删改查关键帧，获取帧内容等
 	 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		UCurveFloat* CurveObj;
 
-	/** 曲线的类型 */
+	/** 保存曲线上所有的关键帧，方便使用 */
 	UPROPERTY()
 		TArray<FEventKey> EventKey;
 };
@@ -224,7 +214,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		UCurveFloat* CurveObj;
 
-	/** 曲线的类型 */
+	/** 保存曲线上所有的关键帧，方便使用 */
 	UPROPERTY()
 		TArray<FKeyInfo> CurveKeyInfo;
 };
@@ -242,15 +232,17 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		UCurveVector* CurveObj;
 
-	/** 曲线的类型 */
+	/** 这里延用官方的概念，所有类型的曲线基础都是Float曲线组成的
+	 *	因为关键帧的数量会不同，所以分3个Array
+	 */
+
+	/** 保存曲线上所有的关键帧，方便使用 */
 	UPROPERTY()
 		TArray<FKeyInfo> XKeyInfo;
 
-	/** 曲线的类型 */
 	UPROPERTY()
 		TArray<FKeyInfo> YKeyInfo;
 
-	/** 曲线的类型 */
 	UPROPERTY()
 		TArray<FKeyInfo> ZKeyInfo;
 
@@ -269,19 +261,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		UCurveLinearColor* CurveObj;
 
-	/** 曲线的类型 */
+	/** 保存曲线上所有的关键帧，方便使用 */
 	UPROPERTY()
 		TArray<FKeyInfo> RKeyInfo;
 
-	/** 曲线的类型 */
 	UPROPERTY()
 		TArray<FKeyInfo> GKeyInfo;
 
-	/** 曲线的类型 */
 	UPROPERTY()
 		TArray<FKeyInfo> BKeyInfo;
 
-	/** 曲线的类型 */
 	UPROPERTY()
 		TArray<FKeyInfo> AKeyInfo;
 
@@ -298,7 +287,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FString GuName;
 
-	/** 需要在Update调用的事件函数 */
+	/** 保存了事件函数的名称 */
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		FString EventFuncGuName;
 
@@ -381,7 +370,7 @@ public:
 	UPROPERTY(BlueprintReadOnly)
 		FString UpdateEventGuName;
 
-	/** Update事件函数，每帧都会执行 */
+	/** Finished事件函数，完成时执行 */
 	UPROPERTY(BlueprintReadOnly)
 		FString FinishedEventGuName;
 
@@ -405,7 +394,7 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 		ELengthMode LengthMode;
 
-	/** 如果GUID都相同了，那就认为是一样的。所以不要给相同的GUID，其他东西不管 */
+	/** 用于比较两个时间线设置是否相等 */
 	friend inline bool operator==(const FTimelineSetting& A, const FTimelineSetting& B)
 	{
 		return
@@ -417,7 +406,7 @@ public:
 			A.FinishedEventGuName == B.FinishedEventGuName;
 	}
 
-	/** Hash校验。强调一下，不要给相同的GUID，其他东西不管 */
+	/** Hash校验，使其可以作为TMap的Key存在。强调一下，不要给相同的GUID，其他东西不管 */
 	friend  inline uint32 GetTypeHash(const FTimelineSetting& Key)
 	{
 		uint32 Hash = 0;
@@ -484,7 +473,7 @@ public:
 			A.SettingGuName == B.SettingGuName;
 	}
 
-	/** Hash校验。强调一下，不要给相同的GUID，其他东西不管 */
+	/** Hash校验，使其可以作为TMap的Key存在。强调一下，不要给相同的GUID，其他东西不管 */
 	friend  inline uint32 GetTypeHash(const FTimelineInfo& Key)
 	{
 		uint32 Hash = 0;
